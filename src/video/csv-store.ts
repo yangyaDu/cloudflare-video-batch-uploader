@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { parse } from 'csv-parse/sync'
 import { stringify } from 'csv-stringify/sync'
 
-import { atomicWrite } from './fs-utils'
+import { atomicWrite } from '../fs-utils'
 import {
   assertVideoHeaders,
   VIDEO_COLUMNS,

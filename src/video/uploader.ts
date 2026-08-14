@@ -1,7 +1,7 @@
-import { BackendClient } from './backend'
-import { loadBackendConfig } from './config'
 import { readVideoCsv, writeVideoCsv } from './csv-store'
-import { pathExists } from './fs-utils'
+import { VideoBackendClient } from './backend'
+import { loadVideoBackendConfig } from './config'
+import { pathExists } from '../fs-utils'
 import { VIDEO_LANGUAGES, resolveWorkPaths, type WorkPaths } from './paths'
 import { readUploadState, writeUploadState } from './state-store'
 import type { UploadItemState, UploadState, VideoCreatePayload } from './types'
@@ -91,7 +91,7 @@ interface LanguageUploadResult {
 
 async function uploadLanguage(
   paths: WorkPaths,
-  client: BackendClient
+  client: VideoBackendClient
 ): Promise<LanguageUploadResult> {
   const [rows, state] = await Promise.all([
     readVideoCsv(paths.csvPath),
@@ -182,7 +182,7 @@ async function uploadLanguage(
 }
 
 export async function uploadVideos(workDir: string): Promise<UploadResult> {
-  const client = new BackendClient(loadBackendConfig())
+  const client = new VideoBackendClient(loadVideoBackendConfig())
   const languageResults: LanguageUploadResult[] = []
   const csvPaths: string[] = []
 

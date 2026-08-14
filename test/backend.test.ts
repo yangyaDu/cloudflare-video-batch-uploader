@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { BackendClient } from '../src/backend'
+import { VideoBackendClient } from '../src/video/backend'
 
 const originalFetch = globalThis.fetch
 const temporaryDirectories: string[] = []
@@ -15,8 +15,8 @@ afterEach(async () => {
   )
 })
 
-function client(): BackendClient {
-  return new BackendClient({
+function client(): VideoBackendClient {
+  return new VideoBackendClient({
     baseUrl: 'https://backend.example.test',
     adminToken: 'admin-token',
     pollIntervalMs: 1,
@@ -25,6 +25,55 @@ function client(): BackendClient {
 }
 
 describe('BackendClient', () => {
+  test('依次调用复式手牌和活动的新增、发布接口', async () => {
+    const requests: Request[] = []
+    globalThis.fetch = (async (input, init) => {
+      const request = new Request(input, init)
+      requests.push(request)
+      const path = new URL(request.url).pathname
+      const id = path.includes('/activity/add') ? 22 : 11
+      return Response.json({ code: 0, message: 'success', data: { id, status: 1 } })
+    }) as typeof fetch
+
+    const hand = await client().addDuplicateMatchHand({
+      title: 'DS-SPOT-PREFLOP-RFI',
+      drillInfo: {
+        players: [],
+        big_blind: 2,
+        ante: 1,
+        dealer_seat: 0,
+        sb_seat: 1,
+        bb_seat: 2,
+        straddle_seat: -1,
+        heroPosition: 'BTN',
+        actions: [],
+        communityCards: { flop: '', turn: '', river: '' },
+      },
+    })
+    await client().publishDuplicateMatchHand(hand.id)
+    const activity = await client().addDuplicateMatchActivity({
+      title: 'DS-SPOT-PREFLOP-RFI',
+      description: 'test',
+      playHandCount: 1,
+      playCount: 6,
+      handList: [{ handId: hand.id, itemType: 1, sortNo: 1 }],
+      startTime: 1,
+      endTime: 2,
+    })
+    await client().publishDuplicateMatchActivity(activity.id)
+
+    expect([hand.id, activity.id]).toEqual([11, 22])
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      '/api/adminimda/duplicate-match/hand/add',
+      '/api/adminimda/duplicate-match/hand/publish',
+      '/api/adminimda/duplicate-match/activity/add',
+      '/api/adminimda/duplicate-match/activity/publish',
+    ])
+    expect(
+      requests.every((request) => request.headers.get('x-adminimda-token') === 'Bearer admin-token')
+    ).toBe(true)
+  })
+
   test('向后端申请 TUS 会话时携带管理员 token 和元数据', async () => {
     let request: Request | undefined
     globalThis.fetch = (async (input, init) => {

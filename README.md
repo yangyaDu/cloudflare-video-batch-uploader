@@ -129,6 +129,25 @@ CSV 只承载新增视频接口所需字段。视频时长、大小、发布和�
 bun run check
 ```
 
+## Data Services 场景验证手牌
+
+本项目同时提供复式手牌 Case 批量工具。它使用固定的 6 人桌骨架生成合法行动线，并为每条 Case 依次新增、发布手牌，再创建并发布一个同名的七天单手活动。
+
+```powershell
+# 先生成 workdir/duplicate-match-hand/cases.json 供人工检查
+bun run hand:generate
+
+# 按状态文件逐条新增并发布手牌和活动
+bun run hand:upload
+
+# 一步执行
+bun run hand:all
+```
+
+上传进度保存在 `workdir/duplicate-match-hand/upload-state.json`。失败后重复执行 `hand:upload` 会从已保存的下一阶段继续。该命令要求管理端 Token 同时拥有 `SYS_DUPLICATE_MATCH_HAND` 和 `SYS_DUPLICATE_MATCH_ACTIVITY` 权限。
+
+完整规则见 [Data Services 场景验证手牌批量工具](docs/duplicate-match-hand-design.md)。
+
 参考资料：
 
 - [Stream TUS 分片上传](https://developers.cloudflare.com/stream/uploading-videos/resumable-uploads/)

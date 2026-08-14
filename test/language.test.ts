@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { detectLanguage } from '../src/language'
+import { detectLanguage } from '../src/video/language'
 
 describe('detectLanguage', () => {
   test('包含中文时返回 zh', () => {

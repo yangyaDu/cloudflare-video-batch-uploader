@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 
-import { atomicWrite } from './fs-utils'
+import { atomicWrite } from '../fs-utils'
 import type { UploadState } from './types'
 
 export async function writeUploadState(path: string, state: UploadState): Promise<void> {

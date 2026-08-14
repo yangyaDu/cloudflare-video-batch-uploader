@@ -3,8 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { readUploadState, writeUploadState } from '../src/state-store'
-import type { UploadState } from '../src/types'
+import { readUploadState, writeUploadState } from '../src/video/state-store'
+import type { UploadState } from '../src/video/types'
 
 const temporaryDirectories: string[] = []
 

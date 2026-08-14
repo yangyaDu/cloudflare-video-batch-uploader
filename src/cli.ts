@@ -2,8 +2,13 @@
 
 import { Command } from 'commander'
 
-import { scanVideos } from './scanner'
-import { uploadVideos } from './uploader'
+import { uploadGeneratedDuplicateMatchHandCases } from './duplicate-match-hand/batch'
+import {
+  generateDuplicateMatchHandCaseFile,
+  resolveDuplicateMatchHandPaths,
+} from './duplicate-match-hand/workspace'
+import { scanVideos } from './video/scanner'
+import { uploadVideos } from './video/uploader'
 
 interface ScanCliOptions {
   input?: string
@@ -12,6 +17,10 @@ interface ScanCliOptions {
 }
 
 interface UploadCliOptions {
+  workDir: string
+}
+
+interface HandCliOptions {
   workDir: string
 }
 
@@ -39,7 +48,7 @@ function printUploadResult(
 const program = new Command()
 program
   .name('video-batch-uploader')
-  .description('扫描本地视频，提取首帧，并批量上传到 Cloudflare Stream/Images')
+  .description('视频上传与 Data Services 验证手牌批量工具')
   .showHelpAfterError()
 
 program
@@ -92,6 +101,49 @@ program
 
     const upload = await uploadVideos(options.workDir)
     printUploadResult(upload.total, upload.completed, upload.failed, upload.csvPaths)
+  })
+
+const handProgram = program
+  .command('hand')
+  .description('生成并批量发布 Data Services 验证手牌及其七天活动')
+
+handProgram
+  .command('generate')
+  .description('生成复式手牌 Case JSON，不请求后端')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .action(async (options: HandCliOptions) => {
+    const manifest = await generateDuplicateMatchHandCaseFile(options.workDir)
+    const paths = resolveDuplicateMatchHandPaths(options.workDir)
+    console.log(`\n生成完成：共 ${manifest.cases.length} 个 Case`)
+    console.log(`Case 文件: ${paths.casesPath}`)
+  })
+
+handProgram
+  .command('upload')
+  .description('上传 Case，发布每手牌并创建、发布对应七天活动')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .action(async (options: HandCliOptions) => {
+    const result = await uploadGeneratedDuplicateMatchHandCases(options.workDir)
+    console.log(
+      `\n处理完成：共 ${result.total} 个，成功 ${result.completed} 个，失败 ${result.failed} 个`
+    )
+    console.log(`状态文件: ${result.statePath}`)
+    if (result.failed > 0) process.exitCode = 1
+  })
+
+handProgram
+  .command('all')
+  .description('生成 Case 后立即执行上传与发布')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .action(async (options: HandCliOptions) => {
+    await generateDuplicateMatchHandCaseFile(options.workDir)
+    const result = await uploadGeneratedDuplicateMatchHandCases(options.workDir)
+    console.log(
+      `\n处理完成：共 ${result.total} 个，成功 ${result.completed} 个，失败 ${result.failed} 个`
+    )
+    console.log(`Case 文件: ${result.casesPath}`)
+    console.log(`状态文件: ${result.statePath}`)
+    if (result.failed > 0) process.exitCode = 1
   })
 
 program.parseAsync().catch((error: unknown) => {

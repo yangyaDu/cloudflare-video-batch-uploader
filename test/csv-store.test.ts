@@ -3,8 +3,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { readVideoCsv, writeVideoCsv } from '../src/csv-store'
-import { createDefaultVideoRow } from '../src/video-schema'
+import { readVideoCsv, writeVideoCsv } from '../src/video/csv-store'
+import { createDefaultVideoRow } from '../src/video/video-schema'
 
 const temporaryDirectories: string[] = []
 

@@ -1,13 +1,12 @@
 import { join, resolve } from 'node:path'
 
+import { ensureDirectory, pathExists } from '../fs-utils'
 import { readVideoCsv, writeVideoCsv } from './csv-store'
 import {
   assertDirectory,
   coverFilePath,
   discoverVideos,
-  ensureDirectory,
   extractFirstFrame,
-  pathExists,
   stateKey,
   videoTitle,
 } from './fs-utils'

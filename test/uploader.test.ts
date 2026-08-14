@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createVideoPayload } from '../src/uploader'
-import type { UploadItemState } from '../src/types'
-import { createDefaultVideoRow } from '../src/video-schema'
+import type { UploadItemState } from '../src/video/types'
+import { createVideoPayload } from '../src/video/uploader'
+import { createDefaultVideoRow } from '../src/video/video-schema'
 
 const item: UploadItemState = {
   key: 'lesson.mp4',

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createDefaultVideoRow, VIDEO_COLUMNS } from '../src/video-schema'
+import { createDefaultVideoRow, VIDEO_COLUMNS } from '../src/video/video-schema'
 
 describe('video CSV schema', () => {
   test('表头与新增视频接口的 9 个字段一致', () => {

@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os'
 
 import ffmpegPath from 'ffmpeg-static'
 
-import { readVideoCsv } from '../src/csv-store'
-import { resolveWorkPaths } from '../src/paths'
-import { scanVideos } from '../src/scanner'
-import { readUploadState } from '../src/state-store'
+import { readVideoCsv } from '../src/video/csv-store'
+import { resolveWorkPaths } from '../src/video/paths'
+import { scanVideos } from '../src/video/scanner'
+import { readUploadState } from '../src/video/state-store'
 
 const temporaryDirectories: string[] = []
 
