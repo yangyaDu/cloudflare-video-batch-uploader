@@ -1,0 +1,30 @@
+{
+  "name": "cloudflare-video-batch-uploader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scan": "bun run src/cli.ts scan",
+    "upload": "bun run src/cli.ts upload",
+    "resume": "bun run src/cli.ts resume",
+    "all": "bun run src/cli.ts all",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "bun run format:check && bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "csv-parse": "^6.1.0",
+    "csv-stringify": "^6.6.0",
+    "dotenv": "^17.2.1",
+    "ffmpeg-static": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ffmpeg-static": "^3.0.3",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}
