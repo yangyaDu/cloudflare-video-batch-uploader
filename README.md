@@ -144,6 +144,19 @@ bun run hand:upload
 bun run hand:all
 ```
 
+`hand:generate` 同时生成 `workdir/duplicate-match-hand/table-ids.csv`，列为 `caseId,title,tableId`。打完每个 Case 后填写对应 `tableId`；重复生成时已填写内容会保留。
+
+填写后使用 `bun run hand:fetch-results`，同时查询原始牌局和 Data Services 解析结果：
+
+- `workdir/duplicate-match-hand/game-hand-history-results/<caseId>.json`
+- `workdir/duplicate-match-hand/data-services-results/<caseId>.json`
+
+两份 JSON 都记录相同的 `caseId`、`title` 和 `tableId`，可与 CSV 行直接对应。查询需要在 `.env` 配置 Web 登录 Token：
+
+```dotenv
+BACKEND_WEB_TOKEN=<web access token>
+```
+
 上传进度保存在 `workdir/duplicate-match-hand/upload-state.json`。失败后重复执行 `hand:upload` 会从已保存的下一阶段继续。该命令要求管理端 Token 同时拥有 `SYS_DUPLICATE_MATCH_HAND` 和 `SYS_DUPLICATE_MATCH_ACTIVITY` 权限。
 
 完整规则见 [Data Services 场景验证手牌批量工具](docs/duplicate-match-hand-design.md)。

@@ -2,6 +2,17 @@ export { BackendClient } from './backend'
 export { generateDuplicateMatchHandCases } from './duplicate-match-hand/case-catalog'
 export { uploadDuplicateMatchHandCases } from './duplicate-match-hand/uploader'
 export {
+  readHandTableIdCsv,
+  syncHandTableIdCsv,
+  writeHandTableIdCsv,
+} from './duplicate-match-hand/table-id-store'
+export { DataServicesHandsClient } from './duplicate-match-hand/data-services-client'
+export { GameHandHistoryClient } from './duplicate-match-hand/game-hand-history-client'
+export {
+  fetchGameHandHistoryResults,
+  fetchHandDataServicesResults,
+} from './duplicate-match-hand/result-fetcher'
+export {
   generateDuplicateMatchHandCaseFile,
   readDuplicateMatchHandCaseFile,
 } from './duplicate-match-hand/workspace'

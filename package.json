@@ -10,6 +10,7 @@
     "all": "bun run src/cli.ts all",
     "hand:generate": "bun run src/cli.ts hand generate",
     "hand:upload": "bun run src/cli.ts hand upload",
+    "hand:fetch-results": "bun run src/cli.ts hand fetch-results",
     "hand:all": "bun run src/cli.ts hand all",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

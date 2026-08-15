@@ -2,7 +2,10 @@
 
 import { Command } from 'commander'
 
-import { uploadGeneratedDuplicateMatchHandCases } from './duplicate-match-hand/batch'
+import {
+  fetchGeneratedHandResults,
+  uploadGeneratedDuplicateMatchHandCases,
+} from './duplicate-match-hand/batch'
 import {
   generateDuplicateMatchHandCaseFile,
   resolveDuplicateMatchHandPaths,
@@ -116,6 +119,7 @@ handProgram
     const paths = resolveDuplicateMatchHandPaths(options.workDir)
     console.log(`\n生成完成：共 ${manifest.cases.length} 个 Case`)
     console.log(`Case 文件: ${paths.casesPath}`)
+    console.log(`TableId CSV: ${paths.tableIdsPath}`)
   })
 
 handProgram
@@ -132,6 +136,25 @@ handProgram
   })
 
 handProgram
+  .command('fetch-results')
+  .description('按 table-ids.csv 下载原始牌谱和 Data Services 解析 JSON')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .action(async (options: HandCliOptions) => {
+    const result = await fetchGeneratedHandResults(options.workDir)
+    console.log(
+      `\nget_hand_history：已配置 ${result.gameHandHistory.total} 个，新增 ${result.gameHandHistory.fetched} 个，跳过 ${result.gameHandHistory.skipped} 个，失败 ${result.gameHandHistory.failed} 个`
+    )
+    console.log(`原始牌谱目录: ${result.gameHandHistoryResultsDir}`)
+    console.log(
+      `Data Services：已配置 ${result.dataServices.total} 个，新增 ${result.dataServices.fetched} 个，跳过 ${result.dataServices.skipped} 个，失败 ${result.dataServices.failed} 个`
+    )
+    console.log(`解析结果目录: ${result.dataServicesResultsDir}`)
+    if (result.gameHandHistory.failed > 0 || result.dataServices.failed > 0) {
+      process.exitCode = 1
+    }
+  })
+
+handProgram
   .command('all')
   .description('生成 Case 后立即执行上传与发布')
   .option('-w, --work-dir <directory>', '工作目录', './workdir')
@@ -142,6 +165,7 @@ handProgram
       `\n处理完成：共 ${result.total} 个，成功 ${result.completed} 个，失败 ${result.failed} 个`
     )
     console.log(`Case 文件: ${result.casesPath}`)
+    console.log(`TableId CSV: ${resolveDuplicateMatchHandPaths(options.workDir).tableIdsPath}`)
     console.log(`状态文件: ${result.statePath}`)
     if (result.failed > 0) process.exitCode = 1
   })

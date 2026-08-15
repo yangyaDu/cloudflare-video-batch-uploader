@@ -15,10 +15,38 @@
 ```text
 workdir/duplicate-match-hand/
 ├─ cases.json         # Case、请求体和本地期望值
+├─ table-ids.csv      # Case 与打牌后 tableId 的对应关系
+├─ game-hand-history-results/
+│  └─ <caseId>.json   # get_hand_history 返回的原始牌局
+├─ data-services-results/
+│  └─ <caseId>.json   # Data Services 返回的解析结果
 └─ upload-state.json  # 远端 handId/activityId 及各发布阶段
 ```
 
 `cases.json` 中的 `expected` 仅供验证 Data Services 返回结果，不会发送给后端。发送给后端的内容只有 `request.title` 和 `request.drillInfo`。
+
+`table-ids.csv` 固定包含 `caseId,title,tableId` 三列。每完成一个活动中的牌局，将牌桌 ID 填入对应 Case 的 `tableId`。再次生成 Case 时会按 `caseId` 保留已填写的值，不会覆盖。
+
+后续查询解析结果时使用：
+
+```text
+GET /api/hands-review/data-services/hands?page=1&pageSize=1&filter=table_id:eq:<tableId>
+```
+
+填写 CSV 后执行：
+
+```powershell
+bun run hand:fetch-results
+```
+
+命令会使用相同的 tableId 分别请求：
+
+```text
+POST /api/game_client/get_hand_history
+GET  /api/hands-review/data-services/hands?page=1&pageSize=1&filter=table_id:eq:<tableId>
+```
+
+两类结果 JSON 都包含 `caseId`、`title`、`tableId`、实际请求信息、抓取时间和完整 `response`，以此与 CSV 行一一对应。同一个 tableId 不允许关联两个 Case；每个接口已经保存相同 Case 和 tableId 的结果时各自跳过，任一接口未就绪时不影响另一份已成功结果。该命令通过 `BACKEND_WEB_TOKEN` 访问 Web 接口。
 
 ## 默认牌桌
 

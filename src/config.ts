@@ -1,6 +1,6 @@
 import 'dotenv/config'
 
-import type { BackendConfig } from './types'
+import type { BackendConfig, DataServicesConfig } from './types'
 
 function requireEnvironment(name: string): string {
   const value = process.env[name]?.trim()
@@ -21,5 +21,18 @@ export function loadBackendConfig(): BackendConfig {
   return {
     baseUrl,
     adminToken: requireEnvironment('BACKEND_ADMIN_TOKEN'),
+  }
+}
+
+export function loadDataServicesConfig(): DataServicesConfig {
+  const baseUrl = requireEnvironment('BACKEND_BASE_URL').replace(/\/$/, '')
+  try {
+    new URL(baseUrl)
+  } catch {
+    throw new Error(`环境变量 BACKEND_BASE_URL 必须是完整 URL，当前值: ${baseUrl}`)
+  }
+  return {
+    baseUrl,
+    webToken: requireEnvironment('BACKEND_WEB_TOKEN'),
   }
 }

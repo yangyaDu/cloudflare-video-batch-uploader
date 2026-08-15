@@ -3,3 +3,8 @@ export interface BackendConfig {
   baseUrl: string
   adminToken: string
 }
+
+export interface DataServicesConfig {
+  baseUrl: string
+  webToken: string
+}

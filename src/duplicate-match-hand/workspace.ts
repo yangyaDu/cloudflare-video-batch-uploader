@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 
 import { atomicWrite } from '../fs-utils'
 import { generateDuplicateMatchHandCases } from './case-catalog'
+import { syncHandTableIdCsv } from './table-id-store'
 import type { GeneratedHandCase } from './types'
 
 export interface DuplicateMatchHandManifest {
@@ -17,6 +18,9 @@ export function resolveDuplicateMatchHandPaths(workDir: string) {
     rootDir,
     casesPath: join(rootDir, 'cases.json'),
     statePath: join(rootDir, 'upload-state.json'),
+    tableIdsPath: join(rootDir, 'table-ids.csv'),
+    dataServicesResultsDir: join(rootDir, 'data-services-results'),
+    gameHandHistoryResultsDir: join(rootDir, 'game-hand-history-results'),
   }
 }
 
@@ -28,8 +32,9 @@ export async function generateDuplicateMatchHandCaseFile(
     generatedAt: new Date().toISOString(),
     cases: generateDuplicateMatchHandCases(),
   }
-  const { casesPath } = resolveDuplicateMatchHandPaths(workDir)
+  const { casesPath, tableIdsPath } = resolveDuplicateMatchHandPaths(workDir)
   await atomicWrite(casesPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  await syncHandTableIdCsv(tableIdsPath, manifest.cases)
   return manifest
 }
 
