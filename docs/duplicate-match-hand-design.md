@@ -15,7 +15,7 @@
 ```text
 workdir/duplicate-match-hand/
 ├─ cases.json         # Case、请求体和本地期望值
-├─ table-ids.csv      # Case 与打牌后 tableId 的对应关系
+├─ table-ids.csv      # Case、handId、activityId 与打牌后 tableId 的对应关系
 ├─ game-hand-history-results/
 │  └─ <caseId>.json   # get_hand_history 返回的原始牌局
 ├─ data-services-results/
@@ -25,7 +25,7 @@ workdir/duplicate-match-hand/
 
 `cases.json` 中的 `expected` 仅供验证 Data Services 返回结果，不会发送给后端。发送给后端的内容只有 `request.title` 和 `request.drillInfo`。
 
-`table-ids.csv` 固定包含 `caseId,title,tableId` 三列。每完成一个活动中的牌局，将牌桌 ID 填入对应 Case 的 `tableId`。再次生成 Case 时会按 `caseId` 保留已填写的值，不会覆盖。
+`table-ids.csv` 固定包含 `caseId,title,handId,activityId,tableId` 五列。`handId` 和 `activityId` 从新增接口响应自动同步；每完成一个活动中的牌局，将牌桌 ID 填入对应 Case 的 `tableId`。再次生成 Case 时会按 `caseId` 保留已填写的值，不会覆盖。旧三列表头会在下次同步时自动升级。
 
 后续查询解析结果时使用：
 
@@ -118,6 +118,10 @@ GET  /api/hands-review/data-services/hands?page=1&pageSize=1&filter=table_id:eq:
 某一步失败后会保留此前成功结果。再次执行上传时从缺失的下一步继续，不重复调用已持久化成功的步骤。
 
 后端接口目前没有幂等键。如果远端新增成功但进程在状态文件落盘前被强制终止，或者人为删除状态文件后重跑，仍可能产生同名记录。
+
+## 重建活动
+
+`bun run hand:rebuild-activities` 只处理当前 `cases.json` 与 `upload-state.json` 中 caseId、title 一致且已保存 `activityId` 的记录：先取消发布、删除旧活动，立即清空本地 `activityId`，再复用 `handId` 创建并发布新活动。它不会使用标题查询后端，因此不会误删状态文件外的同名活动。
 
 ## 命令
 

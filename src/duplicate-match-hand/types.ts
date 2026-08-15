@@ -66,6 +66,8 @@ export interface DuplicateMatchHandBackend {
   publishDuplicateMatchHand(id: number): Promise<void>
   addDuplicateMatchActivity(payload: DuplicateMatchActivityAddPayload): Promise<{ id: number }>
   publishDuplicateMatchActivity(id: number): Promise<void>
+  unpublishDuplicateMatchActivity(id: number): Promise<void>
+  deleteDuplicateMatchActivity(id: number): Promise<{ id: number; isDeleted: 0 | 1 }>
 }
 
 export type HandCaseUploadStage =

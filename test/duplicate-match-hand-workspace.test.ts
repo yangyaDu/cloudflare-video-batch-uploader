@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -40,12 +40,16 @@ describe('duplicate match hand workspace', () => {
     )
 
     const csvText = await readFile(paths.tableIdsPath, 'utf8')
-    expect(csvText.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0]).toBe('caseId,title,tableId')
+    expect(csvText.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0]).toBe(
+      'caseId,title,handId,activityId,tableId'
+    )
     const tableIdRows = await readHandTableIdCsv(paths.tableIdsPath)
     expect(tableIdRows).toHaveLength(generated.cases.length)
     expect(tableIdRows[0]).toEqual({
       caseId: generated.cases[0]!.caseId,
       title: generated.cases[0]!.title,
+      handId: '',
+      activityId: '',
       tableId: '',
     })
   })
@@ -65,5 +69,22 @@ describe('duplicate match hand workspace', () => {
     const regeneratedRows = await readHandTableIdCsv(paths.tableIdsPath)
     expect(regeneratedRows).toHaveLength(generated.cases.length)
     expect(regeneratedRows[0]!.tableId).toBe('7f0000010fa0_125201195936514053')
+  })
+
+  test('兼容读取旧版三列表头的 tableId CSV', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'duplicate-match-hand-'))
+    temporaryDirectories.push(directory)
+    const path = join(directory, 'table-ids.csv')
+    await writeFile(path, 'caseId,title,tableId\ncase-1,Legacy title,table-1\n')
+
+    await expect(readHandTableIdCsv(path)).resolves.toEqual([
+      {
+        caseId: 'case-1',
+        title: 'Legacy title',
+        handId: '',
+        activityId: '',
+        tableId: 'table-1',
+      },
+    ])
   })
 })

@@ -69,4 +69,16 @@ export class BackendClient implements DuplicateMatchHandBackend {
   async publishDuplicateMatchActivity(id: number): Promise<void> {
     await this.request<{ id: number; status: number }>('/duplicate-match/activity/publish', { id })
   }
+
+  async unpublishDuplicateMatchActivity(id: number): Promise<void> {
+    await this.request<{ id: number; status: number }>('/duplicate-match/activity/unpublish', {
+      id,
+    })
+  }
+
+  async deleteDuplicateMatchActivity(id: number): Promise<{ id: number; isDeleted: 0 | 1 }> {
+    return this.request<{ id: number; isDeleted: 0 | 1 }>('/duplicate-match/activity/delete', {
+      id,
+    })
+  }
 }

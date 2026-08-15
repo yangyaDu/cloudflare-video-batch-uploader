@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { UploadItemState } from '../src/video/types'
-import { createVideoPayload } from '../src/video/uploader'
+import { createVideoPayload, saveCreatedVideo } from '../src/video/uploader'
 import { createDefaultVideoRow } from '../src/video/video-schema'
 
 const item: UploadItemState = {
@@ -33,5 +33,19 @@ describe('createVideoPayload', () => {
       secondaryTags: [],
       videoUid: 'stream-uid',
     })
+  })
+
+  test('保存 video/add 响应中的 videoId、时长和大小', () => {
+    saveCreatedVideo(item, { id: 88, videoDuration: 19.4, videoSize: 1234 })
+
+    expect(item).toMatchObject({
+      videoId: 88,
+      videoDuration: 19.4,
+      videoSize: 1234,
+    })
+  })
+
+  test('拒绝缺少有效 video id 的新增响应', () => {
+    expect(() => saveCreatedVideo(item, { id: 0 })).toThrow('缺少有效 video id')
   })
 })

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
 import { atomicWrite, pathExists } from '../fs-utils'
+import { syncHandTableIdCsv } from './table-id-store'
 import type {
   DuplicateMatchHandBackend,
   GeneratedHandCase,
@@ -20,6 +21,7 @@ export interface HandCaseUploadResult {
 
 export interface HandCaseUploadOptions {
   statePath: string
+  tableIdsPath?: string
   now?: () => number
 }
 
@@ -37,9 +39,15 @@ function markItem(
   item.updatedAt = new Date().toISOString()
 }
 
-async function writeState(path: string, state: HandCaseUploadState): Promise<void> {
+async function writeState(
+  path: string,
+  state: HandCaseUploadState,
+  cases: readonly GeneratedHandCase[],
+  tableIdsPath?: string
+): Promise<void> {
   state.updatedAt = new Date().toISOString()
   await atomicWrite(path, `${JSON.stringify(state, null, 2)}\n`)
+  if (tableIdsPath) await syncHandTableIdCsv(tableIdsPath, cases, state.items)
 }
 
 async function loadState(
@@ -116,14 +124,14 @@ export async function uploadDuplicateMatchHandCases(
         const hand = await backend.addDuplicateMatchHand(handCase.request)
         item.handId = hand.id
         markItem(item, 'hand-created')
-        await writeState(options.statePath, state)
+        await writeState(options.statePath, state, cases, options.tableIdsPath)
       }
 
       if (!item.handPublished) {
         await backend.publishDuplicateMatchHand(item.handId)
         item.handPublished = true
         markItem(item, 'hand-published')
-        await writeState(options.statePath, state)
+        await writeState(options.statePath, state, cases, options.tableIdsPath)
       }
 
       if (!item.activityId) {
@@ -139,23 +147,67 @@ export async function uploadDuplicateMatchHandCases(
         })
         item.activityId = activity.id
         markItem(item, 'activity-created')
-        await writeState(options.statePath, state)
+        await writeState(options.statePath, state, cases, options.tableIdsPath)
       }
 
       if (!item.activityPublished) {
         await backend.publishDuplicateMatchActivity(item.activityId)
         item.activityPublished = true
         markItem(item, 'completed')
-        await writeState(options.statePath, state)
+        await writeState(options.statePath, state, cases, options.tableIdsPath)
       }
 
       completed += 1
     } catch (error) {
       failed += 1
       markItem(item, 'failed', errorMessage(error))
-      await writeState(options.statePath, state)
+      await writeState(options.statePath, state, cases, options.tableIdsPath)
     }
   }
 
   return { total: cases.length, completed, failed }
+}
+
+/**
+ * 删除本地状态文件中登记的活动，并清除 activityId 以便随后的上传命令重建活动。
+ * 仅处理当前 cases.json 中同 caseId、同标题的记录，不会按标题扫描或删除其他远端活动。
+ */
+export async function deleteDuplicateMatchHandActivities(
+  cases: readonly GeneratedHandCase[],
+  backend: DuplicateMatchHandBackend,
+  options: HandCaseUploadOptions
+): Promise<{ deleted: number; failed: number; total: number }> {
+  const state = await loadState(cases, options.statePath)
+  const caseById = new Map(cases.map((item) => [item.caseId, item]))
+  let deleted = 0
+  let failed = 0
+
+  for (const item of state.items.filter((candidate) => caseById.has(candidate.caseId))) {
+    if (!item.activityId) continue
+    const handCase = caseById.get(item.caseId)!
+    if (item.title !== handCase.title) {
+      throw new Error(`Case ${item.caseId} 标题已变化，拒绝删除远端活动`)
+    }
+
+    try {
+      if (item.activityPublished) {
+        await backend.unpublishDuplicateMatchActivity(item.activityId)
+        item.activityPublished = false
+        markItem(item, 'activity-created')
+        await writeState(options.statePath, state, cases, options.tableIdsPath)
+      }
+      await backend.deleteDuplicateMatchActivity(item.activityId)
+      delete item.activityId
+      delete item.activityPublished
+      markItem(item, item.handPublished ? 'hand-published' : 'hand-created')
+      await writeState(options.statePath, state, cases, options.tableIdsPath)
+      deleted += 1
+    } catch (error) {
+      failed += 1
+      markItem(item, 'failed', errorMessage(error))
+      await writeState(options.statePath, state, cases, options.tableIdsPath)
+    }
+  }
+
+  return { total: cases.length, deleted, failed }
 }

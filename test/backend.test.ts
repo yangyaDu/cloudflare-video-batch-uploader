@@ -31,8 +31,9 @@ describe('BackendClient', () => {
       const request = new Request(input, init)
       requests.push(request)
       const path = new URL(request.url).pathname
-      const id = path.includes('/activity/add') ? 22 : 11
-      return Response.json({ code: 0, message: 'success', data: { id, status: 1 } })
+      const id = path.includes('/activity/') ? 22 : 11
+      const data = path.includes('/activity/delete') ? { id, isDeleted: 1 } : { id, status: 1 }
+      return Response.json({ code: 0, message: 'success', data })
     }) as typeof fetch
 
     const hand = await client().addDuplicateMatchHand({
@@ -61,6 +62,11 @@ describe('BackendClient', () => {
       endTime: 2,
     })
     await client().publishDuplicateMatchActivity(activity.id)
+    await client().unpublishDuplicateMatchActivity(activity.id)
+    await expect(client().deleteDuplicateMatchActivity(activity.id)).resolves.toEqual({
+      id: 22,
+      isDeleted: 1,
+    })
 
     expect([hand.id, activity.id]).toEqual([11, 22])
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
@@ -68,6 +74,8 @@ describe('BackendClient', () => {
       '/api/adminimda/duplicate-match/hand/publish',
       '/api/adminimda/duplicate-match/activity/add',
       '/api/adminimda/duplicate-match/activity/publish',
+      '/api/adminimda/duplicate-match/activity/unpublish',
+      '/api/adminimda/duplicate-match/activity/delete',
     ])
     expect(
       requests.every((request) => request.headers.get('x-adminimda-token') === 'Bearer admin-token')

@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { generateDuplicateMatchHandCases } from '../src/duplicate-match-hand/case-catalog'
-import { uploadDuplicateMatchHandCases } from '../src/duplicate-match-hand/uploader'
+import {
+  deleteDuplicateMatchHandActivities,
+  uploadDuplicateMatchHandCases,
+} from '../src/duplicate-match-hand/uploader'
+import { readHandTableIdCsv } from '../src/duplicate-match-hand/table-id-store'
 import type { DuplicateMatchHandBackend } from '../src/duplicate-match-hand/types'
 
 const temporaryDirectories: string[] = []
@@ -41,14 +45,22 @@ describe('uploadDuplicateMatchHandCases', () => {
       async publishDuplicateMatchActivity(id) {
         calls.push(`publish-activity:${id}`)
       },
+      async unpublishDuplicateMatchActivity() {
+        throw new Error('不应取消发布')
+      },
+      async deleteDuplicateMatchActivity() {
+        throw new Error('不应删除')
+      },
     }
     const directory = await mkdtemp(join(tmpdir(), 'duplicate-match-hand-'))
     temporaryDirectories.push(directory)
     const statePath = join(directory, 'upload-state.json')
+    const tableIdsPath = join(directory, 'table-ids.csv')
     const item = generateDuplicateMatchHandCases()[0]!
 
     const result = await uploadDuplicateMatchHandCases([item], backend, {
       statePath,
+      tableIdsPath,
       now: () => 1_800_000_000_000,
     })
 
@@ -69,6 +81,15 @@ describe('uploadDuplicateMatchHandCases', () => {
       stage: 'completed',
       lastError: null,
     })
+    await expect(readHandTableIdCsv(tableIdsPath)).resolves.toEqual([
+      {
+        caseId: item.caseId,
+        title: item.title,
+        handId: String(handId),
+        activityId: String(activityId),
+        tableId: '',
+      },
+    ])
   })
 
   test('失败后保留已完成阶段，重试不重复新增手牌', async () => {
@@ -93,6 +114,12 @@ describe('uploadDuplicateMatchHandCases', () => {
       async publishDuplicateMatchActivity() {
         calls.push('publish-activity')
       },
+      async unpublishDuplicateMatchActivity() {
+        throw new Error('不应取消发布')
+      },
+      async deleteDuplicateMatchActivity() {
+        throw new Error('不应删除')
+      },
     }
     const directory = await mkdtemp(join(tmpdir(), 'duplicate-match-hand-'))
     temporaryDirectories.push(directory)
@@ -109,6 +136,59 @@ describe('uploadDuplicateMatchHandCases', () => {
       'add-activity',
       'add-activity',
       'publish-activity',
+    ])
+  })
+
+  test('按状态文件中的 activityId 取消发布、删除并清空活动状态', async () => {
+    const calls: string[] = []
+    const backend: DuplicateMatchHandBackend = {
+      async addDuplicateMatchHand() {
+        return { id: 101 }
+      },
+      async publishDuplicateMatchHand() {},
+      async addDuplicateMatchActivity() {
+        return { id: 201 }
+      },
+      async publishDuplicateMatchActivity() {},
+      async unpublishDuplicateMatchActivity(id) {
+        calls.push(`unpublish:${id}`)
+      },
+      async deleteDuplicateMatchActivity(id) {
+        calls.push(`delete:${id}`)
+        return { id, isDeleted: 1 }
+      },
+    }
+    const directory = await mkdtemp(join(tmpdir(), 'duplicate-match-hand-'))
+    temporaryDirectories.push(directory)
+    const statePath = join(directory, 'upload-state.json')
+    const tableIdsPath = join(directory, 'table-ids.csv')
+    const item = generateDuplicateMatchHandCases()[0]!
+
+    await uploadDuplicateMatchHandCases([item], backend, { statePath, tableIdsPath })
+    const result = await deleteDuplicateMatchHandActivities([item], backend, {
+      statePath,
+      tableIdsPath,
+    })
+
+    expect(result).toEqual({ total: 1, deleted: 1, failed: 0 })
+    expect(calls).toEqual(['unpublish:201', 'delete:201'])
+    const state = JSON.parse(await readFile(statePath, 'utf8'))
+    expect(state.items[0]).toMatchObject({
+      handId: 101,
+      handPublished: true,
+      stage: 'hand-published',
+      lastError: null,
+    })
+    expect(state.items[0].activityId).toBeUndefined()
+    expect(state.items[0].activityPublished).toBeUndefined()
+    await expect(readHandTableIdCsv(tableIdsPath)).resolves.toEqual([
+      {
+        caseId: item.caseId,
+        title: item.title,
+        handId: '101',
+        activityId: '',
+        tableId: '',
+      },
     ])
   })
 })

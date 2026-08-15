@@ -13,7 +13,7 @@
 3. 调用后端 `/api/adminimda/image/upload`，得到 Images 的 `id`、直传 `uploadUrl` 和 `visitUrl`，再直接上传首帧封面。
 4. 调用后端 `/api/adminimda/video/add`。视频仍在转码时后端返回 `1107/1108`，脚本持续轮询；转码 ready 后，后端校验视频和封面并将 `videoUid`、`coverId`、`coverUrl`、实际 `videoSize`、`videoDuration` 写入 `tb_video`。
 
-因此，最终 CSV 中的 `videoUid`、`coverId`、`coverUrl` 与实际入库记录对应；`videoDuration`、`videoSize` 仅由后端写入数据库。
+因此，最终 CSV 中的 `videoUid`、`coverId`、`coverUrl` 与实际入库记录对应；后端返回的 `videoId`、`videoDuration`、`videoSize` 会保存到对应语言的 `upload-state.json`，CSV 仍只保留 `/video/add` 的请求字段。
 
 ## 环境要求
 
@@ -144,7 +144,7 @@ bun run hand:upload
 bun run hand:all
 ```
 
-`hand:generate` 同时生成 `workdir/duplicate-match-hand/table-ids.csv`，列为 `caseId,title,tableId`。打完每个 Case 后填写对应 `tableId`；重复生成时已填写内容会保留。
+`hand:generate` 同时生成 `workdir/duplicate-match-hand/table-ids.csv`，列为 `caseId,title,handId,activityId,tableId`。其中 `handId`、`activityId` 由新增接口的响应自动同步，`tableId` 仍由打牌后人工填写；重复生成时已填写的 `tableId` 会保留。旧的三列表头 CSV 会自动兼容读取，并在下次同步时升级为新表头。
 
 填写后使用 `bun run hand:fetch-results`，同时查询原始牌局和 Data Services 解析结果：
 
@@ -158,6 +158,14 @@ BACKEND_WEB_TOKEN=<web access token>
 ```
 
 上传进度保存在 `workdir/duplicate-match-hand/upload-state.json`。失败后重复执行 `hand:upload` 会从已保存的下一阶段继续。该命令要求管理端 Token 同时拥有 `SYS_DUPLICATE_MATCH_HAND` 和 `SYS_DUPLICATE_MATCH_ACTIVITY` 权限。
+
+如果需要用已存在的手牌重建本工具创建的活动，执行：
+
+```powershell
+bun run hand:rebuild-activities
+```
+
+该命令仅对 `upload-state.json` 中登记的 `activityId` 依次取消发布、删除，再复用已保存的 `handId` 创建并发布新活动；不会按标题扫描或删除其他远端活动。
 
 完整规则见 [Data Services 场景验证手牌批量工具](docs/duplicate-match-hand-design.md)。
 

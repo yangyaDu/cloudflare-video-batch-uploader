@@ -20,6 +20,12 @@ export interface UploadItemState {
   imageUploadUrl?: string
   imageId?: string
   imageVisitUrl?: string
+  /** /video/add 返回的 video 表主键。 */
+  videoId?: number
+  /** /video/add 返回的视频时长（秒）。 */
+  videoDuration?: number
+  /** /video/add 返回的视频大小（字节）。 */
+  videoSize?: number
   /** /video/add 已成功，视频及封面已写入 tb_video。 */
   videoRegistered?: boolean
   lastError: string | null
@@ -59,7 +65,7 @@ export interface VideoCreatePayload {
 }
 
 export interface CreatedVideo {
-  id?: number
+  id: number
   videoDuration?: number
   videoSize?: number
 }

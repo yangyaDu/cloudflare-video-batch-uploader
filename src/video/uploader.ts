@@ -83,6 +83,22 @@ export function createVideoPayload(row: VideoCsvRow, item: UploadItemState): Vid
   }
 }
 
+export function saveCreatedVideo(
+  item: UploadItemState,
+  createdVideo: {
+    id: number
+    videoDuration?: number
+    videoSize?: number
+  }
+): void {
+  if (!Number.isSafeInteger(createdVideo.id) || createdVideo.id <= 0) {
+    throw new Error(`${item.relativeVideoPath} 的 /video/add 响应缺少有效 video id`)
+  }
+  item.videoId = createdVideo.id
+  item.videoDuration = createdVideo.videoDuration
+  item.videoSize = createdVideo.videoSize
+}
+
 interface LanguageUploadResult {
   total: number
   completed: number
@@ -164,7 +180,7 @@ async function uploadLanguage(
       }
 
       console.log('  等待视频转码并写入 video 表...')
-      await client.addVideoWhenReady(createVideoPayload(row, item))
+      saveCreatedVideo(item, await client.addVideoWhenReady(createVideoPayload(row, item)))
       item.videoRegistered = true
       markItem(item, 'completed')
       completed += 1

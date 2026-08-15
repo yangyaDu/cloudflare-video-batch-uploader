@@ -4,6 +4,7 @@ import { Command } from 'commander'
 
 import {
   fetchGeneratedHandResults,
+  rebuildGeneratedDuplicateMatchHandActivities,
   uploadGeneratedDuplicateMatchHandCases,
 } from './duplicate-match-hand/batch'
 import {
@@ -133,6 +134,28 @@ handProgram
     )
     console.log(`状态文件: ${result.statePath}`)
     if (result.failed > 0) process.exitCode = 1
+  })
+
+handProgram
+  .command('rebuild-activities')
+  .description('删除状态文件中登记的活动，并用现有 handId 批量重建')
+  .option('--confirm', '确认删除并重建活动')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .action(async (options: HandCliOptions & { confirm?: boolean }) => {
+    if (!options.confirm) {
+      throw new Error('该命令会删除并重建活动；请显式传入 --confirm')
+    }
+    const result = await rebuildGeneratedDuplicateMatchHandActivities(options.workDir)
+    console.log(
+      `\n旧活动删除：共 ${result.total} 个，成功 ${result.deleted} 个，失败 ${result.failed} 个`
+    )
+    if (result.recreated) {
+      console.log(
+        `重建完成：共 ${result.recreated.total} 个，成功 ${result.recreated.completed} 个，失败 ${result.recreated.failed} 个`
+      )
+    }
+    console.log(`状态文件: ${result.statePath}`)
+    if (result.failed > 0 || result.recreated?.failed) process.exitCode = 1
   })
 
 handProgram
