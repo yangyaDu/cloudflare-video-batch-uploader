@@ -126,10 +126,17 @@ async function uploadLanguage(
     try {
       if (!row) throw new Error(`状态文件中的 rowIndex 越界: ${item.rowIndex}`)
       if (item.videoRegistered) {
+        if (!item.videoId) throw new Error('状态显示已写入 video 表，但缺少 videoId')
+        if (!item.videoPublished) {
+          console.log(`  发布视频 (ID: ${item.videoId})...`)
+          await client.publishVideo(item.videoId)
+          item.videoPublished = true
+          await writeUploadState(paths.statePath, state)
+        }
         markItem(item, 'completed')
         completed += 1
         await writeUploadState(paths.statePath, state)
-        console.log('  跳过，已写入 video 表')
+        console.log('  跳过上传，已写入并发布 video 表记录')
         continue
       }
 
@@ -182,10 +189,17 @@ async function uploadLanguage(
       console.log('  等待视频转码并写入 video 表...')
       saveCreatedVideo(item, await client.addVideoWhenReady(createVideoPayload(row, item)))
       item.videoRegistered = true
+      await writeUploadState(paths.statePath, state)
+
+      const videoId = item.videoId
+      if (!videoId) throw new Error('写入 video 表后缺少 videoId')
+      console.log(`  发布视频 (ID: ${videoId})...`)
+      await client.publishVideo(videoId)
+      item.videoPublished = true
       markItem(item, 'completed')
       completed += 1
       await persist(paths, rows, state)
-      console.log('  完成，已写入 video 表')
+      console.log('  完成，已写入并发布 video 表记录')
     } catch (error) {
       failed += 1
       markItem(item, 'failed', message(error))

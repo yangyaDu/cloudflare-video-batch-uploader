@@ -28,6 +28,8 @@ export interface UploadItemState {
   videoSize?: number
   /** /video/add 已成功，视频及封面已写入 tb_video。 */
   videoRegistered?: boolean
+  /** /video/publish 已成功，视频状态已更新为已发布。 */
+  videoPublished?: boolean
   lastError: string | null
   updatedAt: string
 }

@@ -12,6 +12,7 @@
 2. 使用该 `uploadUrl` 直接向 Cloudflare Stream 分片上传视频；中断后在直传 URL 有效期内可从远端 offset 续传。
 3. 调用后端 `/api/adminimda/image/upload`，得到 Images 的 `id`、直传 `uploadUrl` 和 `visitUrl`，再直接上传首帧封面。
 4. 调用后端 `/api/adminimda/video/add`。视频仍在转码时后端返回 `1107/1108`，脚本持续轮询；转码 ready 后，后端校验视频和封面并将 `videoUid`、`coverId`、`coverUrl`、实际 `videoSize`、`videoDuration` 写入 `tb_video`。
+5. 使用 `/api/adminimda/video/add` 返回的数据库主键 `id` 调用 `/api/adminimda/video/publish`，将视频状态更新为已发布。
 
 因此，最终 CSV 中的 `videoUid`、`coverId`、`coverUrl` 与实际入库记录对应；后端返回的 `videoId`、`videoDuration`、`videoSize` 会保存到对应语言的 `upload-state.json`，CSV 仍只保留 `/video/add` 的请求字段。
 
@@ -83,7 +84,7 @@ workdir/
 bun run upload
 ```
 
-网络中断或个别文件失败后，重复执行同一条 `upload` 命令即可。脚本根据状态文件确认是否已完成入库；对于已创建且仍有效的 TUS 会话，会先 `HEAD` 查询远端 offset 后继续上传。视频、封面和入库均成功后才会标记为完成。
+网络中断或个别文件失败后，重复执行同一条 `upload` 命令即可。脚本根据状态文件确认是否已完成入库和发布；对于已创建且仍有效的 TUS 会话，会先 `HEAD` 查询远端 offset 后继续上传。视频、封面、入库和发布均成功后才会标记为完成。
 
 后续把新视频放入 `video/en` 或 `video/zh` 后，再次执行 `bun run scan`。脚本按语言目录内的相对路径识别新文件，只会向对应 CSV 和状态文件追加新记录、生成新封面；随后运行 `upload` 或 `resume` 即只处理这些未完成的新记录。
 
@@ -93,7 +94,7 @@ bun run upload
 bun run resume
 ```
 
-恢复规则：视频会从 Stream 返回的 TUS offset 继续；封面会复用已保存的 Images 直传会话；已成功调用 `/video/add` 的记录会跳过。若临时直传 URL 已过期，命令会保留错误信息在对应语言的 `upload-state.json`，方便重新创建该条任务。
+恢复规则：视频会从 Stream 返回的 TUS offset 继续；封面会复用已保存的 Images 直传会话；已成功调用 `/video/add` 的记录只补调用 `/video/publish`。如果发布请求已经成功但本地状态尚未写入，后端返回“已发布”也按成功处理。若临时直传 URL 已过期，命令会保留错误信息在对应语言的 `upload-state.json`，方便重新创建该条任务。
 
 也可以一步完成：
 
@@ -112,8 +113,9 @@ bun run all
 - `primaryTags`、`secondaryTags`：默认 `[]`，为 JSON 字符串数组，元素不能包含首尾空格。
 - `coverId`、`coverUrl`：后端签发 Images 直传地址时返回的图片 ID 和访问地址；仅在直传成功后写入。
 - `videoUid`：后端创建 Stream TUS 会话时返回的 UID；会先写入以支持上传续跑。
+- `videoPublished`：保存在 `upload-state.json` 中，表示 `/video/publish` 已成功；CSV 仍不增加该字段。
 
-CSV 只承载新增视频接口所需字段。视频时长、大小、发布和审计字段均由后端 `/video/add` 业务层生成，脚本不会直接连接数据库或执行 SQL。
+CSV 只承载新增视频接口所需字段。视频时长、大小和审计字段由后端 `/video/add` 业务层生成，发布状态由 `/video/publish` 更新；脚本不会直接连接数据库或执行 SQL。
 
 ## 故障定位
 

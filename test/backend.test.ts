@@ -159,4 +159,32 @@ describe('BackendClient', () => {
     ).resolves.toEqual({ id: 8, videoDuration: 19.4, videoSize: 1234 })
     expect(calls).toBe(2)
   })
+
+  test('使用 video/add 返回的数据库 ID 调用发布接口', async () => {
+    let request: Request | undefined
+    globalThis.fetch = (async (input, init) => {
+      request = new Request(input, init)
+      return Response.json({
+        code: 0,
+        message: 'success',
+        data: { id: 88, crossId: 'video-cross-id', status: 1 },
+      })
+    }) as typeof fetch
+
+    await expect(client().publishVideo(88)).resolves.toBeUndefined()
+    expect(request?.url).toBe('https://backend.example.test/api/adminimda/video/publish')
+    expect(request?.headers.get('x-adminimda-token')).toBe('Bearer admin-token')
+    await expect(request?.json()).resolves.toEqual({ id: 88 })
+  })
+
+  test('发布请求重复执行时将后端 1106 已发布视为成功', async () => {
+    globalThis.fetch = (async () =>
+      Response.json({
+        code: 1106,
+        message: 'already published',
+        data: null,
+      })) as unknown as typeof fetch
+
+    await expect(client().publishVideo(88)).resolves.toBeUndefined()
+  })
 })

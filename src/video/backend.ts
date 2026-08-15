@@ -140,4 +140,14 @@ export class VideoBackendClient extends BackendClient {
       }
     }
   }
+
+  async publishVideo(id: number): Promise<void> {
+    try {
+      await this.request<{ id: number; status: number }>('/video/publish', { id })
+    } catch (error) {
+      // 发布接口对已经发布的记录返回 1106；对断点恢复来说这是幂等成功。
+      if (error instanceof BackendApiError && error.code === 1106) return
+      throw error
+    }
+  }
 }
