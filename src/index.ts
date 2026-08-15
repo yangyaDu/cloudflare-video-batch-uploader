@@ -19,5 +19,11 @@ export {
 export { detectLanguage } from './video/language'
 export { VideoBackendClient } from './video/backend'
 export { scanVideos } from './video/scanner'
+export {
+  createVideoExportBackendFromEnvironment,
+  normalizeDatabaseVideoRow,
+  VideoDatabaseExportBackend,
+} from './video/sql-database'
+export { createVideoBatchSql, deriveVideoLanguage, exportVideoBatchSql } from './video/sql-exporter'
 export { uploadVideos } from './video/uploader'
 export { VIDEO_COLUMNS, createDefaultVideoRow } from './video/video-schema'

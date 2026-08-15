@@ -187,4 +187,68 @@ describe('BackendClient', () => {
 
     await expect(client().publishVideo(88)).resolves.toBeUndefined()
   })
+
+  test('确保视频标签时跳过已存在标签，并且不重复创建相同名称', async () => {
+    const requests: Request[] = []
+    globalThis.fetch = (async (input, init) => {
+      const request = new Request(input, init)
+      requests.push(request)
+      const url = new URL(request.url)
+      if (url.pathname.endsWith('/tag/list')) {
+        const name = url.searchParams.get('queryTagName')
+        return Response.json({
+          code: 0,
+          message: 'success',
+          data: {
+            page: 1,
+            pageSize: 1,
+            needCount: 1,
+            count: name === '已有标签' ? 1 : 0,
+            data: name === '已有标签' ? [{ id: 1, name }] : [],
+          },
+        })
+      }
+      return Response.json({ code: 0, message: 'success', data: { id: 2, name: '新标签' } })
+    }) as typeof fetch
+
+    await client().ensureTags(['已有标签', '新标签', '新标签'])
+
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      '/api/adminimda/tag/list',
+      '/api/adminimda/tag/list',
+      '/api/adminimda/tag/add',
+    ])
+    expect(await requests[2]?.json()).toEqual({ name: '新标签' })
+  })
+
+  test('通过 GET 视频列表按批次 ID 读取最终数据库字段', async () => {
+    let request: Request | undefined
+    globalThis.fetch = (async (input, init) => {
+      request = new Request(input, init)
+      return Response.json({
+        code: 0,
+        message: 'success',
+        data: {
+          page: 1,
+          pageSize: 100,
+          needCount: 1,
+          count: 2,
+          data: [
+            { id: 107, crossId: 'cross-107' },
+            { id: 103, crossId: 'cross-103' },
+          ],
+        },
+      })
+    }) as typeof fetch
+
+    const videos = await client().listVideosByIds([103, 107])
+
+    expect(videos.map((video) => video.id)).toEqual([103, 107])
+    expect(request?.method).toBe('GET')
+    expect(request?.headers.get('x-adminimda-token')).toBe('Bearer admin-token')
+    const url = new URL(request?.url || '')
+    expect(url.pathname).toBe('/api/adminimda/video/list')
+    expect(url.searchParams.get('pageSize')).toBe('100')
+    expect(url.searchParams.get('needCount')).toBe('1')
+  })
 })

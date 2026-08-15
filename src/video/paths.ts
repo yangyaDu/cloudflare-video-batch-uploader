@@ -3,6 +3,9 @@ import { join, resolve } from 'node:path'
 export const VIDEO_LANGUAGES = ['en', 'zh'] as const
 export type VideoLanguage = (typeof VIDEO_LANGUAGES)[number]
 
+/** 当前视频批次的默认工作目录。 */
+export const DEFAULT_VIDEO_WORK_DIR = './workdir/update_video_no_tags'
+
 export interface WorkPaths {
   workDir: string
   language: VideoLanguage

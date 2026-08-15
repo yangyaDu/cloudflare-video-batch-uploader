@@ -4,11 +4,12 @@
 
 ```text
 视频目录
-  ├─ video/en/ -> 英文批次
-  ├─ video/zh/ -> 中文批次
+  ├─ video/en/ -> 英文批次（可单独存在）
+  ├─ video/zh/ -> 中文批次（可单独存在）
   └─ scan（每种语言独立执行）
       ├─ 文件名 -> title
       ├─ 目录名 -> language
+      ├─ 可选知识点配置 CSV -> 英文视频 primaryTags
       ├─ ffmpeg 第一帧 -> covers/en|zh/*.jpg
       ├─ /video/add 字段/default -> doc/en|zh/videos.csv
       └─ 路径/行号/阶段 -> doc/en|zh/upload-state.json
@@ -36,6 +37,7 @@ doc/en|zh/videos.csv + upload-state.json
 8. 入库和发布分阶段落盘：`/video/add` 在 Stream 未 ready 时返回业务码 `1107/1108`；脚本只对这两个状态轮询，成功后由后端保存实际时长和大小。入库成功会先保存 `videoRegistered` 和 `videoId`，再调用 `/video/publish`，成功后保存 `videoPublished`。CSV 中空的 `titleDescription` 在提交时转为单个空格，以满足现有接口的最小长度限制。
 9. 发布接口按幂等方式恢复：后端已经发布时返回业务码 `1106`，脚本将其视为成功，避免在发布请求成功但本地状态尚未落盘的窗口中卡住。
 10. 不自动回滚远端资源：一次直传成功但本地落盘前进程被强制终止，可能形成孤立 Cloudflare 资源。自动删除会有更高误删风险，所以由 Cloudflare 控制台人工核查。
+11. 配置标签先校验后落盘：传入知识点配置 CSV 时，同一行已填写的 `介绍视频EN` 和 `漏洞视频EN` 共用 `介绍视频标签`，任一视频列均可留空。扫描器要求已配置名称和本地英文视频一一对应，校验通过后才生成 CSV、状态和封面，避免错误标签进入上传链路。
 
 ## 一致性边界
 

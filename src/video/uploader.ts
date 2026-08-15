@@ -51,6 +51,23 @@ function parseTags(value: string, fieldName: string, item: UploadItemState): str
   return tags
 }
 
+async function ensureVideoTags(
+  rows: readonly VideoCsvRow[],
+  state: UploadState,
+  client: VideoBackendClient
+): Promise<void> {
+  const tagNames = new Set<string>()
+  for (const item of state.items) {
+    const row = rows[item.rowIndex]
+    if (!row) throw new Error(`状态文件中的 rowIndex 越界: ${item.rowIndex}`)
+    for (const tag of parseTags(row.primaryTags, 'primaryTags', item)) tagNames.add(tag)
+    for (const tag of parseTags(row.secondaryTags, 'secondaryTags', item)) tagNames.add(tag)
+  }
+  if (tagNames.size === 0) return
+  console.log(`检查并创建本次视频标签: ${[...tagNames].join('、')}`)
+  await client.ensureTags([...tagNames])
+}
+
 export function createVideoPayload(row: VideoCsvRow, item: UploadItemState): VideoCreatePayload {
   if (row.language !== 'zh' && row.language !== 'en') {
     throw new Error(`${item.relativeVideoPath} 的 language 必须是 zh 或 en`)
@@ -116,6 +133,7 @@ async function uploadLanguage(
   if (rows.length !== state.items.length) {
     throw new Error(`CSV 有 ${rows.length} 行，但状态文件有 ${state.items.length} 项，不能安全续跑`)
   }
+  await ensureVideoTags(rows, state, client)
 
   let completed = 0
   let failed = 0
@@ -212,18 +230,29 @@ async function uploadLanguage(
 }
 
 export async function uploadVideos(workDir: string): Promise<UploadResult> {
-  const client = new VideoBackendClient(loadVideoBackendConfig())
-  const languageResults: LanguageUploadResult[] = []
-  const csvPaths: string[] = []
+  const workPaths: WorkPaths[] = []
 
   for (const language of VIDEO_LANGUAGES) {
     const paths = resolveWorkPaths(workDir, language)
-    if (!(await pathExists(paths.csvPath)) || !(await pathExists(paths.statePath))) {
-      throw new Error(`缺少 ${language} 的 CSV 或上传状态，请先执行 scan`)
+    const [csvExists, stateExists] = await Promise.all([
+      pathExists(paths.csvPath),
+      pathExists(paths.statePath),
+    ])
+    if (csvExists !== stateExists) {
+      throw new Error(`${language} 的 CSV 与上传状态不完整，请先执行 scan`)
     }
-    console.log(`\n[${language}]`)
+    if (csvExists) workPaths.push(paths)
+  }
+
+  if (workPaths.length === 0) {
+    throw new Error('缺少 en 或 zh 的 CSV 和上传状态，请先执行 scan')
+  }
+
+  const client = new VideoBackendClient(loadVideoBackendConfig())
+  const languageResults: LanguageUploadResult[] = []
+  for (const paths of workPaths) {
+    console.log(`\n[${paths.language}]`)
     languageResults.push(await uploadLanguage(paths, client))
-    csvPaths.push(paths.csvPath)
   }
 
   return {
@@ -231,6 +260,6 @@ export async function uploadVideos(workDir: string): Promise<UploadResult> {
     total: languageResults.reduce((sum, result) => sum + result.total, 0),
     completed: languageResults.reduce((sum, result) => sum + result.completed, 0),
     failed: languageResults.reduce((sum, result) => sum + result.failed, 0),
-    csvPaths,
+    csvPaths: workPaths.map((paths) => paths.csvPath),
   }
 }

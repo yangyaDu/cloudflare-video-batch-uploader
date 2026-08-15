@@ -1,6 +1,7 @@
 import { basename } from 'node:path'
 
 import { BackendApiError, BackendClient } from '../backend'
+import type { VideoExportRow } from './sql-exporter'
 import type {
   CreatedVideo,
   ImageUploadInfo,
@@ -14,6 +15,10 @@ const TUS_CHUNK_SIZE = 50 * 1024 * 1024
 const VIDEO_UPLOAD_LIMIT = 500 * 1024 * 1024
 const IMAGE_UPLOAD_LIMIT = 10 * 1024 * 1024
 const VIDEO_NOT_READY_CODES = new Set([1107, 1108])
+
+type TagListData = {
+  data: { name: string }[]
+}
 
 function toTusMetadata(values: Record<string, string>): string {
   return Object.entries(values)
@@ -149,5 +154,57 @@ export class VideoBackendClient extends BackendClient {
       if (error instanceof BackendApiError && error.code === 1106) return
       throw error
     }
+  }
+
+  private async tagExists(name: string): Promise<boolean> {
+    const response = await this.query<TagListData>('/tag/list', {
+      queryTagName: name,
+      page: 1,
+      pageSize: 1,
+      needCount: 1,
+    })
+    return response.data.some((tag) => tag.name === name)
+  }
+
+  /**
+   * 确保本次视频引用的标签已存在；重复名称仅查询和创建一次。
+   */
+  async ensureTags(tagNames: readonly string[]): Promise<void> {
+    const names = [...new Set(tagNames)]
+    for (const name of names) {
+      if (await this.tagExists(name)) continue
+      try {
+        await this.request('/tag/add', { name })
+      } catch (error) {
+        // 其他任务可能刚好创建了同名标签，再查一次后仍不存在才认为失败。
+        if (!(await this.tagExists(name))) throw error
+      }
+    }
+  }
+
+  async listVideosByIds(ids: readonly number[]): Promise<VideoExportRow[]> {
+    const remaining = new Set(ids)
+    const found = new Map<number, VideoExportRow>()
+    const pageSize = 100
+
+    for (let page = 1; remaining.size > 0; page += 1) {
+      const response = await this.query<{
+        page: number
+        pageSize: number
+        count: number
+        data: VideoExportRow[]
+      }>('/video/list', { page, pageSize, needCount: 1 })
+      for (const video of response.data) {
+        if (remaining.delete(video.id)) found.set(video.id, video)
+      }
+      if (response.data.length < pageSize || page * pageSize >= response.count) break
+    }
+
+    if (remaining.size > 0) {
+      throw new Error(
+        `后端视频列表中找不到批次 ID: ${[...remaining].sort((a, b) => a - b).join(', ')}`
+      )
+    }
+    return ids.map((id) => found.get(id) as VideoExportRow)
   }
 }

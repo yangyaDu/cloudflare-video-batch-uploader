@@ -28,15 +28,10 @@ export class BackendClient implements DuplicateMatchHandBackend {
     return new URL(`/api/adminimda${path}`, this.config.baseUrl).toString()
   }
 
-  protected async request<T>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(this.endpoint(path), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-adminimda-token': `Bearer ${this.config.adminToken}`,
-      },
-      body: JSON.stringify(body),
-    })
+  private async send<T>(url: string, init: RequestInit): Promise<T> {
+    const headers = new Headers(init.headers)
+    headers.set('x-adminimda-token', `Bearer ${this.config.adminToken}`)
+    const response = await fetch(url, { ...init, headers })
     const text = await response.text()
     let payload: ApiResponse<T> | null = null
     try {
@@ -50,6 +45,20 @@ export class BackendClient implements DuplicateMatchHandBackend {
       throw new BackendApiError(payload?.code ?? null, `后端 API 请求失败: ${detail}`)
     }
     return payload.data
+  }
+
+  protected async request<T>(path: string, body: unknown): Promise<T> {
+    return this.send<T>(this.endpoint(path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  protected async query<T>(path: string, query: Record<string, string | number>): Promise<T> {
+    const url = new URL(this.endpoint(path))
+    for (const [key, value] of Object.entries(query)) url.searchParams.set(key, String(value))
+    return this.send<T>(url.toString(), { method: 'GET' })
   }
 
   async addDuplicateMatchHand(payload: DuplicateMatchHandAddPayload): Promise<{ id: number }> {

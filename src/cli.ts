@@ -11,17 +11,26 @@ import {
   generateDuplicateMatchHandCaseFile,
   resolveDuplicateMatchHandPaths,
 } from './duplicate-match-hand/workspace'
+import { DEFAULT_VIDEO_WORK_DIR } from './video/paths'
 import { scanVideos } from './video/scanner'
+import { createVideoExportBackendFromEnvironment } from './video/sql-database'
+import { exportVideoBatchSql } from './video/sql-exporter'
 import { uploadVideos } from './video/uploader'
 
 interface ScanCliOptions {
   input?: string
   workDir: string
   force?: boolean
+  tagConfig?: string
 }
 
 interface UploadCliOptions {
   workDir: string
+}
+
+interface ExportSqlCliOptions {
+  workDir: string
+  output?: string
 }
 
 interface HandCliOptions {
@@ -57,15 +66,20 @@ program
 
 program
   .command('scan')
-  .description('扫描 workdir/video/en 和 workdir/video/zh，生成封面、CSV 和上传状态文件')
-  .option('-i, --input <directory>', '视频根目录；默认 <work-dir>/video，内部必须包含 en、zh')
-  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .description('扫描默认视频批次的 video/en 和/或 video/zh，生成封面、CSV 和上传状态文件')
+  .option('-i, --input <directory>', '视频根目录；默认 <work-dir>/video，内部包含 en 或 zh')
+  .option('-w, --work-dir <directory>', '工作目录', DEFAULT_VIDEO_WORK_DIR)
+  .option(
+    '-t, --tag-config <csv>',
+    '知识点配置 CSV；按介绍视频EN/漏洞视频EN为英文视频写入介绍视频标签'
+  )
   .option('--force', '覆盖已有 CSV/状态并重新提取封面')
   .action(async (options: ScanCliOptions) => {
     const result = await scanVideos({
       sourceDir: options.input,
       workDir: options.workDir,
       force: options.force,
+      tagConfigPath: options.tagConfig,
     })
     printScanResult(result.total, result.added, result.failures, result.csvPaths)
     if (result.failures > 0) process.exitCode = 1
@@ -73,8 +87,8 @@ program
 
 program
   .command('upload')
-  .description('读取 doc/en、doc/zh 的 CSV 和状态，上传尚未完成的视频和封面')
-  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .description('读取已有的 doc/en 和/或 doc/zh 批次，上传尚未完成的视频和封面')
+  .option('-w, --work-dir <directory>', '工作目录', DEFAULT_VIDEO_WORK_DIR)
   .action(async (options: UploadCliOptions) => {
     const result = await uploadVideos(options.workDir)
     printUploadResult(result.total, result.completed, result.failed, result.csvPaths)
@@ -83,7 +97,7 @@ program
 program
   .command('resume')
   .description('从 doc/en、doc/zh 的上传状态恢复中断任务')
-  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .option('-w, --work-dir <directory>', '工作目录', DEFAULT_VIDEO_WORK_DIR)
   .action(async (options: UploadCliOptions) => {
     const result = await uploadVideos(options.workDir)
     printUploadResult(result.total, result.completed, result.failed, result.csvPaths)
@@ -92,19 +106,41 @@ program
 program
   .command('all')
   .description('依次执行 scan 和 upload')
-  .option('-i, --input <directory>', '视频根目录；默认 <work-dir>/video，内部必须包含 en、zh')
-  .option('-w, --work-dir <directory>', '工作目录', './workdir')
+  .option('-i, --input <directory>', '视频根目录；默认 <work-dir>/video，内部包含 en 或 zh')
+  .option('-w, --work-dir <directory>', '工作目录', DEFAULT_VIDEO_WORK_DIR)
+  .option(
+    '-t, --tag-config <csv>',
+    '知识点配置 CSV；按介绍视频EN/漏洞视频EN为英文视频写入介绍视频标签'
+  )
   .option('--force', '覆盖已有 CSV/状态并重新提取封面')
   .action(async (options: ScanCliOptions) => {
     const scan = await scanVideos({
       sourceDir: options.input,
       workDir: options.workDir,
       force: options.force,
+      tagConfigPath: options.tagConfig,
     })
     printScanResult(scan.total, scan.added, scan.failures, scan.csvPaths)
 
     const upload = await uploadVideos(options.workDir)
     printUploadResult(upload.total, upload.completed, upload.failed, upload.csvPaths)
+  })
+
+program
+  .command('export-sql')
+  .description('读取当前批次已发布视频并生成可重复执行的 tb_video INSERT SQL')
+  .option('-w, --work-dir <directory>', '工作目录', DEFAULT_VIDEO_WORK_DIR)
+  .option('-o, --output <file>', '输出 SQL 文件；默认 <work-dir>/sql/tb_video.sql')
+  .action(async (options: ExportSqlCliOptions) => {
+    const backend = createVideoExportBackendFromEnvironment()
+    try {
+      const result = await exportVideoBatchSql(options.workDir, options.output, backend)
+      console.log(`\nSQL 导出完成：${result.count} 条视频`)
+      console.log(`Video IDs: ${result.videoIds.join(', ')}`)
+      console.log(`SQL: ${result.outputPath}`)
+    } finally {
+      await backend.close?.()
+    }
   })
 
 const handProgram = program
