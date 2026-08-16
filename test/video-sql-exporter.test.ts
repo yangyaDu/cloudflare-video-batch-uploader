@@ -55,17 +55,18 @@ describe('createVideoBatchSql', () => {
 
     expect(sql).not.toContain('`pk_id`')
     expect(sql).toContain("'zh'")
-    expect(sql).toContain('  1,\n  FROM_UNIXTIME(')
-    expect(sql).toContain('  1,\n  1,\n  FROM_UNIXTIME(')
+    expect(sql).toContain("  1,\n  '2026-08-15 01:02:03'")
+    expect(sql).toContain("  1,\n  1,\n  '2026-08-15 01:00:00'")
+    expect(sql).not.toContain('FROM_UNIXTIME')
     expect(sql).toContain('ON DUPLICATE KEY UPDATE')
     expect(sql).toContain('`uk_cross_id`')
   })
 
-  test('使用十六进制 UTF-8 字面量安全保存引号、反斜杠和中文', () => {
+  test('使用可读的 UTF-8 字符串字面量安全保存引号、反斜杠和中文', () => {
     const sql = createVideoBatchSql([video({ title: "中文'标题\\A" })])
 
-    expect(sql).toContain("CONVERT(X'")
-    expect(sql).not.toContain("中文'标题")
+    expect(sql).not.toContain("CONVERT(X'")
+    expect(sql).toContain("'中文''标题\\\\A'")
     expect(sql).toContain("'zh'")
   })
 
@@ -74,10 +75,10 @@ describe('createVideoBatchSql', () => {
     expect(() => createVideoBatchSql([video({ status: 0 })])).toThrow('未发布')
     expect(
       createVideoBatchSql([video({ primaryTags: ['tag'], secondaryTags: ['leak'] })])
-    ).toContain("CONVERT(X'5b22746167225d' USING utf8mb4)")
+    ).toContain('\'["tag"]\'')
     expect(
       createVideoBatchSql([video({ primaryTags: ['tag'], secondaryTags: ['leak'] })])
-    ).toContain("CONVERT(X'5b226c65616b225d' USING utf8mb4)")
+    ).toContain('\'["leak"]\'')
   })
 })
 

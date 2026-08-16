@@ -64,14 +64,26 @@ export function deriveVideoLanguage(title: string): 'zh' | 'en' {
   return /[一-鿿]/u.test(title) ? 'zh' : 'en'
 }
 
-/** 使用 UTF-8 十六进制字面量，避免引号、反斜杠和换行破坏 SQL。 */
-function utf8(value: string): string {
-  return `CONVERT(X'${Buffer.from(value, 'utf8').toString('hex')}' USING utf8mb4)`
+/** 使用可读的 UTF-8 SQL 字符串字面量，并转义 MySQL 的特殊字符。 */
+function sqlString(value: string): string {
+  const escaped = value
+    .replaceAll('\\', '\\\\')
+    .replaceAll("'", "''")
+    .replaceAll('\u0000', '\\0')
+    .replaceAll('\n', '\\n')
+    .replaceAll('\r', '\\r')
+    .replaceAll('\u001a', '\\Z')
+  return `'${escaped}'`
 }
 
 function timestamp(epochMs: number): string {
   if (!Number.isFinite(epochMs) || epochMs <= 0) return 'NULL'
-  return `FROM_UNIXTIME(${Math.floor(epochMs / 1000)})`
+  return sqlString(
+    new Date(epochMs)
+      .toISOString()
+      .replace('T', ' ')
+      .replace(/\.\d{3}Z$/, '')
+  )
 }
 
 function validateRow(row: VideoExportRow): void {
@@ -88,22 +100,22 @@ function validateRow(row: VideoExportRow): void {
 function rowValues(row: VideoExportRow): string {
   validateRow(row)
   return [
-    utf8(row.crossId),
-    utf8(row.title),
+    sqlString(row.crossId),
+    sqlString(row.title),
     `'${deriveVideoLanguage(row.title)}'`,
-    utf8(row.titleDescription),
-    utf8(row.coverId),
-    utf8(row.coverUrl),
+    sqlString(row.titleDescription),
+    sqlString(row.coverId),
+    sqlString(row.coverUrl),
     '1',
     String(row.difficulty),
     '0',
-    utf8(JSON.stringify(row.primaryTags)),
-    utf8(JSON.stringify(row.secondaryTags)),
+    sqlString(JSON.stringify(row.primaryTags)),
+    sqlString(JSON.stringify(row.secondaryTags)),
     '1',
     timestamp(row.publishedAt),
     String(row.videoDuration),
     String(row.videoSize),
-    utf8(row.videoUid),
+    sqlString(row.videoUid),
     '1',
     '1',
     timestamp(row.gmtCreate),

@@ -174,6 +174,7 @@ async function uploadLanguage(
           throw new Error(`视频文件不存在: ${item.videoPath}`)
         console.log(`  直传视频到 Cloudflare Stream (UID: ${row.videoUid})...`)
         await client.uploadVideoToTus(item.videoPath, item.videoUploadUrl)
+        delete item.videoUploadUrl
         markItem(item, 'video-uploaded')
         await persist(paths, rows, state)
       } else {
