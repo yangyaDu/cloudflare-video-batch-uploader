@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path'
 
-import { atomicWrite } from '../fs-utils'
+import { atomicWrite, pathExists } from '../fs-utils'
 import { VideoBackendClient } from './backend'
 import { loadVideoBackendConfig } from './config'
 import { VIDEO_LANGUAGES, resolveWorkPaths } from './paths'
@@ -83,9 +83,6 @@ function validateRow(row: VideoExportRow): void {
   }
   if (row.status !== 1) throw new Error(`视频 ${row.id} 未发布，拒绝导出`)
   if (row.isDeleted !== 0) throw new Error(`视频 ${row.id} 已删除，拒绝导出`)
-  if (row.primaryTags.length > 0 || row.secondaryTags.length > 0) {
-    throw new Error(`视频 ${row.id} 标签不为空，拒绝导出 update_video_no_tags 批次`)
-  }
 }
 
 function rowValues(row: VideoExportRow): string {
@@ -134,7 +131,7 @@ export function createVideoBatchSql(rows: readonly VideoExportRow[]): string {
     .join(',\n')
   const ids = rows.map((row) => row.id).join(', ')
 
-  return `-- update_video_no_tags 批次；源 video IDs: ${ids}\n-- 不包含 pk_id，目标库自行生成；三个操作人字段固定为 1。\nSET NAMES utf8mb4;\nSTART TRANSACTION;\n\nINSERT INTO \`tb_video\` (\n${columns}\n) VALUES\n${values}\nON DUPLICATE KEY UPDATE\n${updateColumns};\n\nCOMMIT;\n`
+  return `-- 视频导入批次；源 video IDs: ${ids}\n-- 不包含 pk_id，目标库自行生成；三个操作人字段固定为 1。\nSET NAMES utf8mb4;\nSTART TRANSACTION;\n\nINSERT INTO \`tb_video\` (\n${columns}\n) VALUES\n${values}\nON DUPLICATE KEY UPDATE\n${updateColumns};\n\nCOMMIT;\n`
 }
 
 export async function exportVideoBatchSql(
@@ -144,7 +141,9 @@ export async function exportVideoBatchSql(
 ): Promise<VideoSqlExportResult> {
   const ids: number[] = []
   for (const language of VIDEO_LANGUAGES) {
-    const state = await readUploadState(resolveWorkPaths(workDir, language).statePath)
+    const statePath = resolveWorkPaths(workDir, language).statePath
+    if (!(await pathExists(statePath))) continue
+    const state = await readUploadState(statePath)
     for (const item of state.items) {
       if (!item.videoRegistered || !item.videoPublished || !item.videoId) {
         throw new Error(`${language}/${item.relativeVideoPath} 尚未完成入库和发布，拒绝导出`)
@@ -154,6 +153,9 @@ export async function exportVideoBatchSql(
   }
 
   const uniqueIds = [...new Set(ids)].sort((a, b) => a - b)
+  if (uniqueIds.length === 0) {
+    throw new Error('工作目录中没有可导出的已发布视频状态文件')
+  }
   if (uniqueIds.length !== ids.length) throw new Error('批次状态中存在重复 videoId')
   const rows = await backend.listVideosByIds(uniqueIds)
   if (rows.length !== uniqueIds.length) {

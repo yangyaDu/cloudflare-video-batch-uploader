@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, rm, stat } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative } from 'node:path'
 
 import ffmpegPath from 'ffmpeg-static'
 
-import { ensureDirectory } from '../fs-utils'
+import { ensureDirectory, pathExists } from '../fs-utils'
 
 const VIDEO_EXTENSIONS = new Set([
   '.3gp',
@@ -51,7 +51,14 @@ export async function discoverVideos(sourceDir: string): Promise<string[]> {
 
 export function videoTitle(path: string): string {
   const extension = extname(path)
-  return basename(path, extension)
+  const fileName = basename(path, extension)
+  const withoutSequence = fileName.replace(/^\d+-/, '')
+  const withoutLanguage = withoutSequence.replace(/[-_]+(?:\[(?:cn|en)\]|cn|en)[-_]*$/i, '')
+  const withoutMetadata = withoutLanguage.replace(
+    /(?:[-_]+\[(?:river|postflop_fta|sb|bet|kqo)\])+$/i,
+    ''
+  )
+  return withoutMetadata.replace(/[-_]+$/, '')
 }
 
 export function stateKey(sourceDir: string, videoPath: string): string {
@@ -64,38 +71,51 @@ export function coverFilePath(coverDir: string, key: string, title: string): str
   return join(coverDir, `${safeTitle}-${suffix}.jpg`)
 }
 
-export async function extractFirstFrame(videoPath: string, outputPath: string): Promise<void> {
+const COVER_TIMESTAMP_SECONDS = 1
+
+export async function extractCoverFrame(videoPath: string, outputPath: string): Promise<void> {
   if (!ffmpegPath) {
     throw new Error('ffmpeg-static 未提供当前平台的可执行文件')
   }
+  const executablePath = ffmpegPath
 
   await ensureDirectory(dirname(outputPath))
-  const process = Bun.spawn({
-    cmd: [
-      ffmpegPath,
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-y',
-      '-i',
-      videoPath,
-      '-vf',
-      'select=eq(n\\,0)',
-      '-frames:v',
-      '1',
-      '-q:v',
-      '2',
-      outputPath,
-    ],
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
 
-  const [exitCode, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stderr).text(),
-  ])
-  if (exitCode !== 0) {
-    throw new Error(`提取首帧失败: ${stderr.trim() || `ffmpeg exit ${exitCode}`}`)
+  async function extractAt(timestamp?: number): Promise<string | null> {
+    await rm(outputPath, { force: true }).catch(() => undefined)
+    const process = Bun.spawn({
+      cmd: [
+        executablePath,
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-y',
+        ...(timestamp === undefined ? [] : ['-ss', String(timestamp)]),
+        '-i',
+        videoPath,
+        '-frames:v',
+        '1',
+        '-q:v',
+        '2',
+        outputPath,
+      ],
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const [exitCode, stderr] = await Promise.all([
+      process.exited,
+      new Response(process.stderr).text(),
+    ])
+    return exitCode === 0 && (await pathExists(outputPath))
+      ? null
+      : stderr.trim() || `ffmpeg exit ${exitCode}`
+  }
+
+  const seekError = await extractAt(COVER_TIMESTAMP_SECONDS)
+  if (seekError) {
+    const fallbackError = await extractAt()
+    if (fallbackError) {
+      throw new Error(`提取 1 秒处封面失败，且首帧回退失败: ${fallbackError}; 原因: ${seekError}`)
+    }
   }
 }

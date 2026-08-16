@@ -6,7 +6,7 @@ import {
   assertDirectory,
   coverFilePath,
   discoverVideos,
-  extractFirstFrame,
+  extractCoverFrame,
   stateKey,
   videoTitle,
 } from './fs-utils'
@@ -64,6 +64,19 @@ async function scanLanguage(
   }
 
   let rowsChanged = false
+  for (const item of state.items) {
+    const row = rows[item.rowIndex]
+    if (!row) throw new Error(`状态文件中的 rowIndex 越界: ${item.rowIndex}`)
+
+    const expectedTitle = videoTitle(item.videoPath)
+    if (row.title !== expectedTitle) {
+      if (item.videoRegistered || item.videoPublished) {
+        throw new Error(`已入库视频的 title 与文件名不一致: ${item.relativeVideoPath}`)
+      }
+      row.title = expectedTitle
+      rowsChanged = true
+    }
+  }
   if (primaryTagsByTitle) {
     for (const item of state.items) {
       const row = rows[item.rowIndex]
@@ -132,7 +145,7 @@ async function scanLanguage(
   for (const [index, item] of itemsNeedingCover.entries()) {
     console.log(`[封面 ${index + 1}/${itemsNeedingCover.length}] ${item.relativeVideoPath}`)
     try {
-      await extractFirstFrame(item.videoPath, item.coverPath)
+      await extractCoverFrame(item.videoPath, item.coverPath)
       item.stage = 'cover-created'
       item.lastError = null
     } catch (error) {

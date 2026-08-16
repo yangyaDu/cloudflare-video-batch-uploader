@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { Command } from 'commander'
+import { join } from 'node:path'
 
 import {
   fetchGeneratedHandResults,
@@ -11,6 +12,7 @@ import {
   generateDuplicateMatchHandCaseFile,
   resolveDuplicateMatchHandPaths,
 } from './duplicate-match-hand/workspace'
+import { summarizeVideoDurations } from './video/duration'
 import { DEFAULT_VIDEO_WORK_DIR } from './video/paths'
 import { scanVideos } from './video/scanner'
 import { createVideoExportBackendFromEnvironment } from './video/sql-database'
@@ -25,6 +27,11 @@ interface ScanCliOptions {
 }
 
 interface UploadCliOptions {
+  workDir: string
+}
+
+interface DurationCliOptions {
+  input?: string
   workDir: string
 }
 
@@ -83,6 +90,20 @@ program
     })
     printScanResult(result.total, result.added, result.failures, result.csvPaths)
     if (result.failures > 0) process.exitCode = 1
+  })
+
+program
+  .command('duration')
+  .description('汇总 video/en 和/或 video/zh 中所有视频的总时长')
+  .option('-i, --input <directory>', '视频根目录；默认 <work-dir>/video，内部包含 en 或 zh')
+  .option('-w, --work-dir <directory>', '工作目录', DEFAULT_VIDEO_WORK_DIR)
+  .action(async (options: DurationCliOptions) => {
+    const videoRoot = options.input || join(options.workDir, 'video')
+    const result = await summarizeVideoDurations(videoRoot)
+    for (const [language, summary] of result.byLanguage) {
+      console.log(`${language}: ${summary.videoCount} 个，${summary.formattedDuration}`)
+    }
+    console.log(`总计: ${result.total.videoCount} 个，${result.total.formattedDuration}`)
   })
 
 program

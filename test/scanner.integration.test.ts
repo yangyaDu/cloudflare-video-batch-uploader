@@ -19,7 +19,7 @@ afterEach(async () => {
 })
 
 describe('scanVideos integration', () => {
-  test('扫描真实视频并提取第一帧', async () => {
+  test('扫描真实视频并提取封面', async () => {
     if (!ffmpegPath) throw new Error('ffmpeg-static 不支持当前平台')
 
     const root = await mkdtemp(join(tmpdir(), 'video-scan-'))

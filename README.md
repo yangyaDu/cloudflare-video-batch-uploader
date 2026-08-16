@@ -1,6 +1,6 @@
 # Cloudflare 视频批量上传工具
 
-配合 `backend-framework` 的 Bun/TypeScript 命令行工具。它会递归扫描本地视频、把文件名作为标题、根据标题识别中英文、提取第一帧作为封面，并复用管理端的 Cloudflare Stream / Images 直传与视频入库链路。
+配合 `backend-framework` 的 Bun/TypeScript 命令行工具。它会递归扫描本地视频、把文件名作为标题、根据标题识别中英文、提取视频第 1 秒处的画面作为封面，并复用管理端的 Cloudflare Stream / Images 直传与视频入库链路。
 
 每个关键步骤都会立即更新 `videos.csv` 和 `upload-state.json`。上传源路径、Stream TUS 上传地址和入库进度保存在状态文件中；CSV 的表头严格对应 `/video/add` 的 9 个请求字段。
 
@@ -51,14 +51,15 @@ VIDEO_READY_TIMEOUT_MS=1800000
 cd E:\idea_project\ZenithStrat\cloudflare-video-batch-uploader
 ```
 
-| 步骤          | 需要准备                                                   | 放置位置/生成结果                                                                                | 执行命令                   |
-| ------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------- |
-| 1. 配置后端   | 后端地址、拥有 `SYS_VIDEO` 权限的管理端 token              | 写入项目根目录 `.env` 的 `BACKEND_BASE_URL`、`BACKEND_ADMIN_TOKEN`                               | 无                         |
-| 2. 放置素材   | 本地视频文件                                               | 英文放 `workdir/update_video_no_tags/video/en/`，中文放 `workdir/update_video_no_tags/video/zh/` | 无                         |
-| 3. 扫描       | 第 2 步的视频                                              | 首帧封面生成到批次的 `covers/en/`、`covers/zh/`；CSV 和状态生成到 `doc/en/`、`doc/zh/`           | `bun run video-no-tags:scan` |
-| 4. 人工检查   | `doc/en/videos.csv`、`doc/zh/videos.csv`                   | 检查标题、语言、难度和标签；`coverId`、`coverUrl`、`videoUid` 不要手填                           | 无                         |
-| 5. 上传并发布 | 后端已配置 Cloudflare Stream、Images                       | 视频和封面直传 Cloudflare，随后调用 `/video/add` 和 `/video/publish`；结果回填 CSV 和状态文件    | `bun run video-no-tags:upload` |
-| 6. 导出 SQL   | 所有状态均为 `videoRegistered=true`、`videoPublished=true` | `workdir/update_video_no_tags/sql/tb_video.sql`                                                  | `bun run video:export-sql` |
+| 步骤          | 需要准备                                                   | 放置位置/生成结果                                                                                | 执行命令                           |
+| ------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| 1. 配置后端   | 后端地址、拥有 `SYS_VIDEO` 权限的管理端 token              | 写入项目根目录 `.env` 的 `BACKEND_BASE_URL`、`BACKEND_ADMIN_TOKEN`                               | 无                                 |
+| 2. 放置素材   | 本地视频文件                                               | 英文放 `workdir/update_video_no_tags/video/en/`，中文放 `workdir/update_video_no_tags/video/zh/` | 无                                 |
+| 时长汇总      | 第 2 步的视频                                              | 输出 en、zh 和总计时长                                                                           | `bun run video-no-tags:duration`   |
+| 3. 扫描       | 第 2 步的视频                                              | 取第 1 秒的封面生成到批次的 `covers/en/`、`covers/zh/`；CSV 和状态生成到 `doc/en/`、`doc/zh/`    | `bun run video-no-tags:scan`       |
+| 4. 人工检查   | `doc/en/videos.csv`、`doc/zh/videos.csv`                   | 检查标题、语言、难度和标签；`coverId`、`coverUrl`、`videoUid` 不要手填                           | 无                                 |
+| 5. 上传并发布 | 后端已配置 Cloudflare Stream、Images                       | 视频和封面直传 Cloudflare，随后调用 `/video/add` 和 `/video/publish`；结果回填 CSV 和状态文件    | `bun run video-no-tags:upload`     |
+| 6. 导出 SQL   | 所有状态均为 `videoRegistered=true`、`videoPublished=true` | `workdir/update_video_no_tags/sql/tb_video.sql`                                                  | `bun run video-no-tags:export-sql` |
 
 上传中断时重复执行 `bun run video-no-tags:upload`，脚本会从状态文件继续，不重复已经完成的步骤。
 
@@ -104,7 +105,7 @@ bun run video-no-tags:scan
 
 ```text
 workdir/update_video_no_tags/
-├── covers/en|zh/         # 每个视频的第一帧 JPG
+├── covers/en|zh/         # 每个视频第 1 秒处的 JPG 封面
 └── doc/en|zh/            # 各自语言的 videos.csv、upload-state.json
 ```
 
@@ -135,7 +136,7 @@ bun run video-no-tags:all
 当前批次全部发布后可导出目标环境 SQL：
 
 ```powershell
-bun run video:export-sql
+bun run video-no-tags:export-sql
 ```
 
 默认输出到 `workdir/update_video_no_tags/sql/tb_video.sql`。SQL 不包含 `pk_id`，三个操作人字段固定为 `1`，语言按标题是否包含 `[一-鿿]` 重新计算，并使用 `uk_cross_id` 保证重复执行时更新同一条视频。
@@ -169,6 +170,12 @@ bun run video-tags:upload
 
 ```powershell
 bun run video-tags:all
+```
+
+标签批次全部发布后，使用以下命令导出包含 `primaryTags`、`secondaryTags` 的 SQL：
+
+```powershell
+bun run video-tags:export-sql
 ```
 
 扫描开始前会校验配置是否完整、名称是否重复、每个本地视频是否存在配置以及每个已配置视频是否存在本地文件。任何一项不满足都会停止，不生成可上传的半批次。两个英文视频列都为空的行视为不属于本次上传批次。

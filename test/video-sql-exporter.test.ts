@@ -69,45 +69,45 @@ describe('createVideoBatchSql', () => {
     expect(sql).toContain("'zh'")
   })
 
-  test('拒绝空 crossId、未发布视频和非空标签', () => {
+  test('拒绝空 crossId 和未发布视频，并保留标签 JSON', () => {
     expect(() => createVideoBatchSql([video({ crossId: '' })])).toThrow('crossId')
     expect(() => createVideoBatchSql([video({ status: 0 })])).toThrow('未发布')
-    expect(() => createVideoBatchSql([video({ primaryTags: ['tag'] })])).toThrow('标签不为空')
+    expect(
+      createVideoBatchSql([video({ primaryTags: ['tag'], secondaryTags: ['leak'] })])
+    ).toContain("CONVERT(X'5b22746167225d' USING utf8mb4)")
+    expect(
+      createVideoBatchSql([video({ primaryTags: ['tag'], secondaryTags: ['leak'] })])
+    ).toContain("CONVERT(X'5b226c65616b225d' USING utf8mb4)")
   })
 })
 
 describe('exportVideoBatchSql', () => {
-  test('只使用两个语言状态文件中的已发布 videoId 生成指定 SQL 文件', async () => {
+  test('只使用实际存在的英文状态文件中的已发布 videoId 生成指定 SQL 文件', async () => {
     const workDir = await mkdtemp(join(tmpdir(), 'video-sql-export-'))
     temporaryDirectories.push(workDir)
-    for (const [language, id] of [
-      ['en', 103],
-      ['zh', 107],
-    ] as const) {
-      const paths = resolveWorkPaths(workDir, language)
-      await writeUploadState(paths.statePath, {
-        version: 2,
-        sourceDir: paths.videoDir,
-        workDir,
-        createdAt: '2026-08-15T00:00:00.000Z',
-        updatedAt: '2026-08-15T00:00:00.000Z',
-        items: [
-          {
-            key: `${language}.mp4`,
-            rowIndex: 0,
-            relativeVideoPath: `${language}.mp4`,
-            videoPath: join(paths.videoDir, `${language}.mp4`),
-            coverPath: join(paths.coverDir, `${language}.jpg`),
-            stage: 'completed',
-            videoId: id,
-            videoRegistered: true,
-            videoPublished: true,
-            lastError: null,
-            updatedAt: '2026-08-15T00:00:00.000Z',
-          },
-        ],
-      })
-    }
+    const paths = resolveWorkPaths(workDir, 'en')
+    await writeUploadState(paths.statePath, {
+      version: 2,
+      sourceDir: paths.videoDir,
+      workDir,
+      createdAt: '2026-08-15T00:00:00.000Z',
+      updatedAt: '2026-08-15T00:00:00.000Z',
+      items: [
+        {
+          key: 'en.mp4',
+          rowIndex: 0,
+          relativeVideoPath: 'en.mp4',
+          videoPath: join(paths.videoDir, 'en.mp4'),
+          coverPath: join(paths.coverDir, 'en.jpg'),
+          stage: 'completed',
+          videoId: 103,
+          videoRegistered: true,
+          videoPublished: true,
+          lastError: null,
+          updatedAt: '2026-08-15T00:00:00.000Z',
+        },
+      ],
+    })
 
     let requestedIds: readonly number[] = []
     const result = await exportVideoBatchSql(workDir, undefined, {
@@ -117,9 +117,9 @@ describe('exportVideoBatchSql', () => {
       },
     })
 
-    expect(requestedIds).toEqual([103, 107])
+    expect(requestedIds).toEqual([103])
     expect(result.outputPath).toBe(join(workDir, 'sql', 'tb_video.sql'))
-    expect(result.count).toBe(2)
+    expect(result.count).toBe(1)
     expect(await readFile(result.outputPath, 'utf8')).not.toContain('`pk_id`')
   })
 })
