@@ -381,34 +381,20 @@ bun run learn:publish <课程根节点UUID>
 
 ## 5. 整理本次发布的新增 SQL
 
-学习节点创建并确认无误后，将本批新增内容整理成独立的 SQL 发布包：
+学习节点创建并确认无误后，将本批新增的视频和课程节点整理到同一个 SQL 文件：
 
 ```text
-workdir/<批次名>/release-sql/
-├── 01_tb_admin_tag.sql
-├── 02_tb_video.sql
-├── 03_tb_learn_node.sql
-└── 99_verify.sql
+workdir/<批次名>/release-sql/<批次名>-release.sql
 ```
 
 ### 5.1 整理 SQL 文件
 
-先建立发布目录并复制视频脚本生成的两个 SQL：
+单个 SQL 文件按以下顺序整理：
 
-```powershell
-Set-Location 'E:\idea_project\ZenithStrat\cloudflare-video-batch-uploader'
-$batch = '20260915_phase3' # 改成本批批次名
-$releaseSql = ".\workdir\$batch\release-sql"
-
-New-Item -ItemType Directory -Force $releaseSql
-Copy-Item ".\workdir\$batch\sql\tb_admin_tag.sql" "$releaseSql\01_tb_admin_tag.sql"
-Copy-Item ".\workdir\$batch\sql\tb_video.sql" "$releaseSql\02_tb_video.sql"
-```
-
-- `01_tb_admin_tag.sql`：复制本批 `export-sql` 生成的 `sql/tb_admin_tag.sql`。
-- `02_tb_video.sql`：复制本批 `export-sql` 生成的 `sql/tb_video.sql`。
-- `03_tb_learn_node.sql`：根据最终 `$created` 文件整理本批新增的章节、小节、视频和 Drill 节点 SQL。
-- `99_verify.sql`：查询本批视频和节点的总数、发布状态、唯一资源数，执行结果必须与课程对照表一致。
+1. 本批新增标签 SQL；没有新标签时省略。
+2. 本批 `export-sql` 生成的视频 SQL。
+3. 根据最终 `$created` 文件生成的章节、小节、视频和 Drill 节点 SQL。
+4. 查询本批视频和节点总数、发布状态及唯一资源数的校验 SQL。
 
 整理要求：
 
@@ -420,7 +406,7 @@ Copy-Item ".\workdir\$batch\sql\tb_video.sql" "$releaseSql\02_tb_video.sql"
 
 ### 5.2 SQL 核对结果
 
-- [ ] SQL 文件按 `01 → 02 → 03 → 99` 的顺序执行无报错。
+- [ ] 单个发布 SQL 完整执行无报错，并正常提交事务。
 - [ ] 本批视频数、节点数和唯一资源数正确。
 - [ ] 没有重复的 `uk_cross_id`、`video_uid`、`node_uuid` 或错误复用的 `drill_public_id`。
 - [ ] SQL 中没有 Token、开发环境地址或与本批无关的数据。
@@ -446,7 +432,7 @@ Copy-Item ".\workdir\$batch\sql\tb_video.sql" "$releaseSql\02_tb_video.sql"
 
 - [ ] 批次名、环境和发布时间。
 - [ ] 视频数量、总时长、失败数和视频 SQL 路径。
-- [ ] 本批 `release-sql` 目录及 SQL 验证结果。
+- [ ] 本批 `<批次名>-release.sql` 文件及 SQL 验证结果。
 - [ ] Drill 数量、行动线数量、失败数及两个仓库提交号。
 - [ ] 课程根节点 UUID、节点数量和 `$created` 文件路径。
 - [ ] 视频播放、Drill 建桌、章节顺序和资源绑定的验收结果。
