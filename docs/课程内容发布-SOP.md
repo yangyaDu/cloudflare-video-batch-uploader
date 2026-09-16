@@ -38,23 +38,22 @@ bun --version
 
 `cloudflare-video-batch-uploader/main` 已包含 `src/learn-node/`、示例 Manifest、文档和对应的 `learn:*` 命令，其他机器可直接拉取使用。
 
-首次准备仓库：
+首次准备仓库时，先在 PowerShell 中进入任意用于存放这三个仓库的工作目录，然后执行：
 
 ```powershell
-$projectRoot = 'E:\idea_project\ZenithStrat'
-Set-Location $projectRoot
-
 git clone http://10.10.1.100:3000/dion/cloudflare-video-batch-uploader.git
 git clone --branch feat/postflop-drill-select-hole-cards `
   http://10.10.1.100:3000/ZenithStrat/backend-framework
 git clone http://10.10.1.100:3000/ZenithStrat/preflop-range.git
 
-Set-Location "$projectRoot\preflop-range"
+Set-Location .\preflop-range
 git lfs install
 git lfs pull
 ```
 
 仓库已经存在时不要重复 `clone`，改为拉取指定分支的最新代码。执行期间不要切换分支，也不要混入其他批次的改动。
+
+本文后续命令均使用相对路径。每节开头标注了执行仓库，请先进入该仓库根目录，再执行对应命令。
 
 ## 1. 收到内容后，先整理一张总表
 
@@ -128,7 +127,6 @@ VIDEO_READY_TIMEOUT_MS=1800000
 ### 2.3 依次执行四条命令
 
 ```powershell
-Set-Location 'E:\idea_project\ZenithStrat\cloudflare-video-batch-uploader'
 $batch = '20260915_phase3' # 改成本批批次名
 
 # 统计本批视频的文件数量、各语言时长和总时长，不会修改或上传文件
@@ -240,8 +238,6 @@ backend-framework/scripts/third_party_strategy_grid/data/
 ### 3.3 先拉完整底表，再跑本批数据
 
 ```powershell
-Set-Location 'E:\idea_project\ZenithStrat\backend-framework'
-
 bun run range-postflop-drill:pull
 Copy-Item `
   .\range-db\postflop-drill\postflop-drill-data.json `
@@ -270,8 +266,8 @@ bun run scripts/third_party_strategy_grid/run-scene-range-third-party.ts `
 
 ```powershell
 Copy-Item `
-  'E:\idea_project\ZenithStrat\backend-framework\scripts\third_party_strategy_grid\data\postflop-drill-data.json' `
-  'E:\idea_project\ZenithStrat\preflop-range\range-db\postflop-drill\postflop-drill-data.json'
+  .\scripts\third_party_strategy_grid\data\postflop-drill-data.json `
+  ..\preflop-range\range-db\postflop-drill\postflop-drill-data.json
 ```
 
 在 `preflop-range` 中确认 Git LFS 已接管该文件，再提交并推送 `main`。后端部署会从 `preflop-range/main` 拉取它。
@@ -341,7 +337,6 @@ workdir/learn-node/<批次名>-manifest.json
 沿用上传器 `.env` 中的 `BACKEND_BASE_URL` 和 `BACKEND_ADMIN_TOKEN`：
 
 ```powershell
-Set-Location 'E:\idea_project\ZenithStrat\cloudflare-video-batch-uploader'
 $manifest = '.\workdir\learn-node\20260915_phase3-manifest.json'
 $created = '.\workdir\learn-node\20260915_phase3-created.json'
 
