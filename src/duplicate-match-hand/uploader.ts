@@ -102,6 +102,17 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function activityUuid(item: HandCaseUploadItemState): string | undefined {
+  if (item.activityUuid) return item.activityUuid
+  const legacyActivityId = (item as HandCaseUploadItemState & { activityId?: unknown }).activityId
+  if (legacyActivityId !== undefined) {
+    throw new Error(
+      `Case ${item.caseId} 仅保存了旧版 activityId (${legacyActivityId})，缺少 activityUuid；请先从后端查询并写入 activityUuid 后再继续`
+    )
+  }
+  return undefined
+}
+
 /**
  * 逐条完成“新增手牌、发布手牌、新增活动、发布活动”，每一步成功后立即保存状态。
  * 已保存的远端 ID 和发布标记会在重试时复用。
@@ -134,7 +145,8 @@ export async function uploadDuplicateMatchHandCases(
         await writeState(options.statePath, state, cases, options.tableIdsPath)
       }
 
-      if (!item.activityId) {
+      let savedActivityUuid = activityUuid(item)
+      if (!savedActivityUuid) {
         const startTime = now()
         const activity = await backend.addDuplicateMatchActivity({
           title: handCase.title,
@@ -145,13 +157,14 @@ export async function uploadDuplicateMatchHandCases(
           startTime,
           endTime: startTime + ACTIVITY_DURATION_MS,
         })
-        item.activityId = activity.id
+        item.activityUuid = activity.activityUuid
+        savedActivityUuid = item.activityUuid
         markItem(item, 'activity-created')
         await writeState(options.statePath, state, cases, options.tableIdsPath)
       }
 
       if (!item.activityPublished) {
-        await backend.publishDuplicateMatchActivity(item.activityId)
+        await backend.publishDuplicateMatchActivity(savedActivityUuid)
         item.activityPublished = true
         markItem(item, 'completed')
         await writeState(options.statePath, state, cases, options.tableIdsPath)
@@ -169,7 +182,7 @@ export async function uploadDuplicateMatchHandCases(
 }
 
 /**
- * 删除本地状态文件中登记的活动，并清除 activityId 以便随后的上传命令重建活动。
+ * 删除本地状态文件中登记的活动，并清除 activityUuid 以便随后的上传命令重建活动。
  * 仅处理当前 cases.json 中同 caseId、同标题的记录，不会按标题扫描或删除其他远端活动。
  */
 export async function deleteDuplicateMatchHandActivities(
@@ -183,21 +196,21 @@ export async function deleteDuplicateMatchHandActivities(
   let failed = 0
 
   for (const item of state.items.filter((candidate) => caseById.has(candidate.caseId))) {
-    if (!item.activityId) continue
-    const handCase = caseById.get(item.caseId)!
-    if (item.title !== handCase.title) {
-      throw new Error(`Case ${item.caseId} 标题已变化，拒绝删除远端活动`)
-    }
-
     try {
+      const savedActivityUuid = activityUuid(item)
+      if (!savedActivityUuid) continue
+      const handCase = caseById.get(item.caseId)!
+      if (item.title !== handCase.title) {
+        throw new Error(`Case ${item.caseId} 标题已变化，拒绝删除远端活动`)
+      }
       if (item.activityPublished) {
-        await backend.unpublishDuplicateMatchActivity(item.activityId)
+        await backend.unpublishDuplicateMatchActivity(savedActivityUuid)
         item.activityPublished = false
         markItem(item, 'activity-created')
         await writeState(options.statePath, state, cases, options.tableIdsPath)
       }
-      await backend.deleteDuplicateMatchActivity(item.activityId)
-      delete item.activityId
+      await backend.deleteDuplicateMatchActivity(savedActivityUuid)
+      delete item.activityUuid
       delete item.activityPublished
       markItem(item, item.handPublished ? 'hand-published' : 'hand-created')
       await writeState(options.statePath, state, cases, options.tableIdsPath)

@@ -41,7 +41,7 @@ describe('duplicate match hand workspace', () => {
 
     const csvText = await readFile(paths.tableIdsPath, 'utf8')
     expect(csvText.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0]).toBe(
-      'caseId,title,handId,activityId,tableId'
+      'caseId,title,handId,activityUuid,tableId'
     )
     const tableIdRows = await readHandTableIdCsv(paths.tableIdsPath)
     expect(tableIdRows).toHaveLength(generated.cases.length)
@@ -49,7 +49,7 @@ describe('duplicate match hand workspace', () => {
       caseId: generated.cases[0]!.caseId,
       title: generated.cases[0]!.title,
       handId: '',
-      activityId: '',
+      activityUuid: '',
       tableId: '',
     })
   })
@@ -82,7 +82,27 @@ describe('duplicate match hand workspace', () => {
         caseId: 'case-1',
         title: 'Legacy title',
         handId: '',
-        activityId: '',
+        activityUuid: '',
+        tableId: 'table-1',
+      },
+    ])
+  })
+
+  test('兼容读取旧版带 activityId 的五列表头', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'duplicate-match-hand-'))
+    temporaryDirectories.push(directory)
+    const path = join(directory, 'table-ids.csv')
+    await writeFile(
+      path,
+      'caseId,title,handId,activityId,tableId\ncase-1,Legacy title,101,201,table-1\n'
+    )
+
+    await expect(readHandTableIdCsv(path)).resolves.toEqual([
+      {
+        caseId: 'case-1',
+        title: 'Legacy title',
+        handId: '101',
+        activityUuid: '201',
         tableId: 'table-1',
       },
     ])

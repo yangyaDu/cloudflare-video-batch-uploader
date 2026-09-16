@@ -10,13 +10,14 @@ import {
 } from './duplicate-match-hand/batch'
 import {
   generateDuplicateMatchHandCaseFile,
+  generateNineMaxDuplicateMatchHandCaseFile,
   resolveDuplicateMatchHandPaths,
 } from './duplicate-match-hand/workspace'
 import { summarizeVideoDurations } from './video/duration'
 import { DEFAULT_VIDEO_WORK_DIR } from './video/paths'
 import { scanVideos } from './video/scanner'
 import { createVideoExportBackendFromEnvironment } from './video/sql-database'
-import { exportVideoBatchSql } from './video/sql-exporter'
+import { exportVideoBatchSql, exportVideoTagBatchSql } from './video/sql-exporter'
 import { uploadVideos } from './video/uploader'
 
 interface ScanCliOptions {
@@ -149,16 +150,24 @@ program
 
 program
   .command('export-sql')
-  .description('读取当前批次已发布视频并生成可重复执行的 tb_video INSERT SQL')
+  .description('读取当前批次已发布视频并生成可重复执行的 tb_admin_tag 与 tb_video SQL')
   .option('-w, --work-dir <directory>', '工作目录', DEFAULT_VIDEO_WORK_DIR)
-  .option('-o, --output <file>', '输出 SQL 文件；默认 <work-dir>/sql/tb_video.sql')
+  .option('-o, --output <file>', '视频 SQL 输出文件；标签 SQL 固定同目录 tb_admin_tag.sql')
   .action(async (options: ExportSqlCliOptions) => {
+    const tagResult = await exportVideoTagBatchSql(options.workDir, options.output)
+    console.log(`标签 SQL（${tagResult.tagCount} 个）: ${tagResult.tagOutputPath}`)
+
     const backend = createVideoExportBackendFromEnvironment()
     try {
-      const result = await exportVideoBatchSql(options.workDir, options.output, backend)
+      const result = await exportVideoBatchSql(
+        options.workDir,
+        options.output,
+        backend,
+        tagResult.tagNames
+      )
       console.log(`\nSQL 导出完成：${result.count} 条视频`)
       console.log(`Video IDs: ${result.videoIds.join(', ')}`)
-      console.log(`SQL: ${result.outputPath}`)
+      console.log(`视频 SQL: ${result.outputPath}`)
     } finally {
       await backend.close?.()
     }
@@ -181,6 +190,18 @@ handProgram
   })
 
 handProgram
+  .command('generate-9max')
+  .description('生成九人桌 Data Services 验证手牌 Case JSON，不请求后端')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir/9max')
+  .action(async (options: HandCliOptions) => {
+    const manifest = await generateNineMaxDuplicateMatchHandCaseFile(options.workDir)
+    const paths = resolveDuplicateMatchHandPaths(options.workDir)
+    console.log(`\n九人桌 Case 生成完成：共 ${manifest.cases.length} 个 Case`)
+    console.log(`Case 文件: ${paths.casesPath}`)
+    console.log(`TableId CSV: ${paths.tableIdsPath}`)
+  })
+
+handProgram
   .command('upload')
   .description('上传 Case，发布每手牌并创建、发布对应七天活动')
   .option('-w, --work-dir <directory>', '工作目录', './workdir')
@@ -188,6 +209,19 @@ handProgram
     const result = await uploadGeneratedDuplicateMatchHandCases(options.workDir)
     console.log(
       `\n处理完成：共 ${result.total} 个，成功 ${result.completed} 个，失败 ${result.failed} 个`
+    )
+    console.log(`状态文件: ${result.statePath}`)
+    if (result.failed > 0) process.exitCode = 1
+  })
+
+handProgram
+  .command('upload-9max')
+  .description('上传九人桌 Case，发布手牌并创建、发布对应活动')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir/9max')
+  .action(async (options: HandCliOptions) => {
+    const result = await uploadGeneratedDuplicateMatchHandCases(options.workDir)
+    console.log(
+      `\n九人桌处理完成：共 ${result.total} 个，成功 ${result.completed} 个，失败 ${result.failed} 个`
     )
     console.log(`状态文件: ${result.statePath}`)
     if (result.failed > 0) process.exitCode = 1
@@ -246,6 +280,22 @@ handProgram
     )
     console.log(`Case 文件: ${result.casesPath}`)
     console.log(`TableId CSV: ${resolveDuplicateMatchHandPaths(options.workDir).tableIdsPath}`)
+    console.log(`状态文件: ${result.statePath}`)
+    if (result.failed > 0) process.exitCode = 1
+  })
+
+handProgram
+  .command('all-9max')
+  .description('生成九人桌 Case 后立即创建并发布手牌和活动')
+  .option('-w, --work-dir <directory>', '工作目录', './workdir/9max')
+  .action(async (options: HandCliOptions) => {
+    const manifest = await generateNineMaxDuplicateMatchHandCaseFile(options.workDir)
+    const result = await uploadGeneratedDuplicateMatchHandCases(options.workDir)
+    console.log(
+      `\n九人桌处理完成：共 ${result.total} 个，成功 ${result.completed} 个，失败 ${result.failed} 个`
+    )
+    console.log(`Case 文件: ${resolveDuplicateMatchHandPaths(options.workDir).casesPath}`)
+    console.log(`九人桌 Case 数: ${manifest.cases.length}`)
     console.log(`状态文件: ${result.statePath}`)
     if (result.failed > 0) process.exitCode = 1
   })

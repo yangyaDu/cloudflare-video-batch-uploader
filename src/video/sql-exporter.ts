@@ -1,8 +1,9 @@
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 import { atomicWrite, pathExists } from '../fs-utils'
 import { VideoBackendClient } from './backend'
 import { loadVideoBackendConfig } from './config'
+import { readVideoCsv } from './csv-store'
 import { VIDEO_LANGUAGES, resolveWorkPaths } from './paths'
 import { readUploadState } from './state-store'
 
@@ -32,8 +33,16 @@ export interface VideoExportBackend {
 
 export interface VideoSqlExportResult {
   outputPath: string
+  tagCount: number
+  tagOutputPath: string
   count: number
   videoIds: number[]
+}
+
+export interface VideoTagSqlExportResult {
+  tagCount: number
+  tagNames: string[]
+  tagOutputPath: string
 }
 
 const VIDEO_COLUMNS = [
@@ -58,6 +67,8 @@ const VIDEO_COLUMNS = [
   'gmt_create',
   'gmt_modified',
 ] as const
+
+const VIDEO_TAG_COLUMNS = ['uk_name', 'created_by', 'updated_by'] as const
 
 /** 与数据库回填 SQL 的 `[一-鿿]` 规则保持一致。 */
 export function deriveVideoLanguage(title: string): 'zh' | 'en' {
@@ -125,6 +136,96 @@ function rowValues(row: VideoExportRow): string {
     .join(',\n')
 }
 
+/** 收集当前批次视频引用的标签，保持首次出现顺序并拒绝非法标签名。 */
+export function collectVideoTagNames(rows: readonly VideoExportRow[]): string[] {
+  return collectTagNames(
+    rows.map((row) => ({
+      context: `视频 ${row.id}`,
+      tags: [...row.primaryTags, ...row.secondaryTags],
+    }))
+  )
+}
+
+function collectTagNames(
+  groups: ReadonlyArray<{ context: string; tags: readonly string[] }>
+): string[] {
+  const names = new Set<string>()
+  for (const group of groups) {
+    for (const tag of group.tags) {
+      assertTagName(tag, group.context)
+      names.add(tag)
+    }
+  }
+  return [...names]
+}
+
+function assertTagName(name: string, context: string): void {
+  if (!name || name.trim() !== name || Array.from(name).length > 64) {
+    throw new Error(`${context} 包含无效标签名: ${JSON.stringify(name)}`)
+  }
+}
+
+/**
+ * 生成 tb_admin_tag 的幂等导入 SQL。
+ * 目标环境已有同名标签时不会重复创建，也不会修改其审计字段。
+ */
+export function createVideoTagBatchSql(tagNames: readonly string[]): string {
+  const names = [...new Set(tagNames)]
+  for (const name of names) assertTagName(name, '标签 SQL')
+  if (names.length === 0) {
+    return '-- 当前视频批次没有引用标签，无需导入 tb_admin_tag。\n'
+  }
+
+  const columns = VIDEO_TAG_COLUMNS.map((column) => `  \`${column}\``).join(',\n')
+  const values = names.map((name) => `(\n  ${sqlString(name)},\n  1,\n  1\n)`).join(',\n')
+  return `-- 视频标签导入批次；共 ${names.length} 个标签。\nSET NAMES utf8mb4;\nSTART TRANSACTION;\n\nINSERT INTO \`tb_admin_tag\` (\n${columns}\n) VALUES\n${values}\nON DUPLICATE KEY UPDATE\n  \`uk_name\` = VALUES(\`uk_name\`);\n\nCOMMIT;\n`
+}
+
+function parseCsvTags(value: string, context: string): string[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new Error(`${context} 不是合法的标签 JSON 数组`)
+  }
+  if (!Array.isArray(parsed) || parsed.some((tag) => typeof tag !== 'string')) {
+    throw new Error(`${context} 必须是字符串数组`)
+  }
+  return parsed
+}
+
+/**
+ * 从批次 CSV 导出标签 SQL，不依赖视频已经写入当前后端。
+ * 因此即使视频导出所连接的环境不一致，标签 SQL 仍可单独用于同步。
+ */
+export async function exportVideoTagBatchSql(
+  workDir: string,
+  videoSqlOutputPath = join(resolve(workDir), 'sql', 'tb_video.sql')
+): Promise<VideoTagSqlExportResult> {
+  const tagGroups: Array<{ context: string; tags: string[] }> = []
+  for (const language of VIDEO_LANGUAGES) {
+    const csvPath = resolveWorkPaths(workDir, language).csvPath
+    if (!(await pathExists(csvPath))) continue
+    const rows = await readVideoCsv(csvPath)
+    rows.forEach((row, index) => {
+      const context = `${language}/videos.csv 第 ${index + 2} 行`
+      tagGroups.push({
+        context,
+        tags: [
+          ...parseCsvTags(row.primaryTags, `${context} primaryTags`),
+          ...parseCsvTags(row.secondaryTags, `${context} secondaryTags`),
+        ],
+      })
+    })
+  }
+  if (tagGroups.length === 0) throw new Error('工作目录中没有可导出标签的 videos.csv')
+
+  const tagNames = collectTagNames(tagGroups)
+  const tagOutputPath = join(dirname(resolve(videoSqlOutputPath)), 'tb_admin_tag.sql')
+  await atomicWrite(tagOutputPath, createVideoTagBatchSql(tagNames))
+  return { tagNames, tagCount: tagNames.length, tagOutputPath }
+}
+
 export function createVideoBatchSql(rows: readonly VideoExportRow[]): string {
   if (rows.length === 0) throw new Error('没有可导出的视频')
   const crossIds = new Set<string>()
@@ -149,7 +250,8 @@ export function createVideoBatchSql(rows: readonly VideoExportRow[]): string {
 export async function exportVideoBatchSql(
   workDir: string,
   outputPath = join(resolve(workDir), 'sql', 'tb_video.sql'),
-  backend: VideoExportBackend = new VideoBackendClient(loadVideoBackendConfig())
+  backend: VideoExportBackend = new VideoBackendClient(loadVideoBackendConfig()),
+  exportedTagNames?: readonly string[]
 ): Promise<VideoSqlExportResult> {
   const ids: number[] = []
   for (const language of VIDEO_LANGUAGES) {
@@ -181,6 +283,17 @@ export async function exportVideoBatchSql(
   })
 
   const absoluteOutputPath = resolve(outputPath)
-  await atomicWrite(absoluteOutputPath, createVideoBatchSql(orderedRows))
-  return { outputPath: absoluteOutputPath, count: orderedRows.length, videoIds: uniqueIds }
+  const tagOutputPath = join(dirname(absoluteOutputPath), 'tb_admin_tag.sql')
+  const tagNames = exportedTagNames ? [...exportedTagNames] : collectVideoTagNames(orderedRows)
+  await Promise.all([
+    atomicWrite(absoluteOutputPath, createVideoBatchSql(orderedRows)),
+    atomicWrite(tagOutputPath, createVideoTagBatchSql(tagNames)),
+  ])
+  return {
+    outputPath: absoluteOutputPath,
+    tagOutputPath,
+    tagCount: tagNames.length,
+    count: orderedRows.length,
+    videoIds: uniqueIds,
+  }
 }

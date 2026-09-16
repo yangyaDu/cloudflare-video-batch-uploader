@@ -36,6 +36,21 @@ describe('video tag config', () => {
     expect(config.get('btn steal leak')).toMatchObject({ primaryTag: 'BTN Steal', rowNumber: 4 })
   })
 
+  test('配置名称和本地文件名均沿用标题清洗，移除前序编号与末尾 EN 标记', async () => {
+    const path = await writeConfig([
+      '介绍视频标签,介绍视频EN,漏洞视频EN',
+      'BTN Steal,5-BTN RFI Standard Decision Guide-[EN],',
+    ])
+    const config = await readVideoTagConfig(path)
+
+    expect(config.get('5-BTN RFI Standard Decision Guide-[EN].mp4')).toMatchObject({
+      primaryTag: 'BTN Steal',
+    })
+    expect(config.matchVideoTitles(['BTN RFI Standard Decision Guide'])).toEqual(
+      new Map([['BTN RFI Standard Decision Guide', 'BTN Steal']])
+    )
+  })
+
   test('要求本地视频与配置中的两条英文视频完整且唯一地匹配', async () => {
     const path = await writeConfig([
       '介绍视频标签,介绍视频EN,漏洞视频EN',
@@ -73,6 +88,17 @@ describe('video tag config', () => {
     const partialConfig = await readVideoTagConfig(partialPath)
     expect(partialConfig.size).toBe(1)
     expect(partialConfig.get('BTN Steal Intro')).toMatchObject({ primaryTag: 'BTN Steal' })
+  })
+
+  test('只填写介绍视频EN列时也可读取配置', async () => {
+    const path = await writeConfig([
+      '介绍视频标签,介绍视频EN,备注',
+      'BTN Steal,BTN Steal Intro,新加',
+    ])
+
+    const config = await readVideoTagConfig(path)
+
+    expect(config.get('BTN Steal Intro')).toMatchObject({ primaryTag: 'BTN Steal' })
   })
 
   test('填写英文视频时要求介绍视频标签', async () => {

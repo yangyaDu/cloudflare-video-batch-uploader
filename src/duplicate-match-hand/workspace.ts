@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 
 import { atomicWrite } from '../fs-utils'
 import { generateDuplicateMatchHandCases } from './case-catalog'
+import { generateNineMaxDuplicateMatchHandCases } from './nine-max-case-catalog'
 import { syncHandTableIdCsv } from './table-id-store'
 import type { GeneratedHandCase } from './types'
 
@@ -31,6 +32,20 @@ export async function generateDuplicateMatchHandCaseFile(
     version: 1,
     generatedAt: new Date().toISOString(),
     cases: generateDuplicateMatchHandCases(),
+  }
+  const { casesPath, tableIdsPath } = resolveDuplicateMatchHandPaths(workDir)
+  await atomicWrite(casesPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  await syncHandTableIdCsv(tableIdsPath, manifest.cases)
+  return manifest
+}
+
+export async function generateNineMaxDuplicateMatchHandCaseFile(
+  workDir: string
+): Promise<DuplicateMatchHandManifest> {
+  const manifest: DuplicateMatchHandManifest = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    cases: generateNineMaxDuplicateMatchHandCases(),
   }
   const { casesPath, tableIdsPath } = resolveDuplicateMatchHandPaths(workDir)
   await atomicWrite(casesPath, `${JSON.stringify(manifest, null, 2)}\n`)

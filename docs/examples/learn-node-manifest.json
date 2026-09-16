@@ -1,0 +1,17 @@
+[
+  {
+    "courseTitle": "核心决策训练",
+    "chapters": [
+      {
+        "chapterTitle": "翻前基础",
+        "subChapters": [
+          {
+            "subChapterTitle": "位置与起手牌",
+            "video": { "title": "位置优势解析", "refId": "" },
+            "drill": null
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,5 +1,9 @@
 # Cloudflare 视频批量上传工具
 
+学习节点配置脚本已接入，使用 `bun run learn:list` 查询课程，
+或 `bun run learn:build --manifest docs/examples/learn-node-manifest.json --dry-run` 预览课程树。
+完整命令和断点恢复方法见 [学习节点脚本](docs/learn-node.md)。
+
 配合 `backend-framework` 的 Bun/TypeScript 命令行工具。它会递归扫描本地视频、把文件名作为标题、根据标题识别中英文、提取视频第 1 秒处的画面作为封面，并复用管理端的 Cloudflare Stream / Images 直传与视频入库链路。
 
 每个关键步骤都会立即更新 `videos.csv` 和 `upload-state.json`。上传源路径、Stream TUS 上传地址和入库进度保存在状态文件中；CSV 的表头严格对应 `/video/add` 的 9 个请求字段。
@@ -59,7 +63,7 @@ cd E:\idea_project\ZenithStrat\cloudflare-video-batch-uploader
 | 3. 扫描       | 第 2 步的视频                                              | 取第 1 秒的封面生成到批次的 `covers/en/`、`covers/zh/`；CSV 和状态生成到 `doc/en/`、`doc/zh/`    | `bun run video-no-tags:scan`       |
 | 4. 人工检查   | `doc/en/videos.csv`、`doc/zh/videos.csv`                   | 检查标题、语言、难度和标签；`coverId`、`coverUrl`、`videoUid` 不要手填                           | 无                                 |
 | 5. 上传并发布 | 后端已配置 Cloudflare Stream、Images                       | 视频和封面直传 Cloudflare，随后调用 `/video/add` 和 `/video/publish`；结果回填 CSV 和状态文件    | `bun run video-no-tags:upload`     |
-| 6. 导出 SQL   | 所有状态均为 `videoRegistered=true`、`videoPublished=true` | `workdir/update_video_no_tags/sql/tb_video.sql`                                                  | `bun run video-no-tags:export-sql` |
+| 6. 导出 SQL   | 所有状态均为 `videoRegistered=true`、`videoPublished=true` | `workdir/update_video_no_tags/sql/tb_admin_tag.sql`、`tb_video.sql`                              | `bun run video-no-tags:export-sql` |
 
 上传中断时重复执行 `bun run video-no-tags:upload`，脚本会从状态文件继续，不重复已经完成的步骤。
 
@@ -139,9 +143,9 @@ bun run video-no-tags:all
 bun run video-no-tags:export-sql
 ```
 
-默认输出到 `workdir/update_video_no_tags/sql/tb_video.sql`。SQL 不包含 `pk_id`，三个操作人字段固定为 `1`，语言按标题是否包含 `[一-鿿]` 重新计算，并使用 `uk_cross_id` 保证重复执行时更新同一条视频。
+默认同时输出 `workdir/update_video_no_tags/sql/tb_admin_tag.sql` 和 `tb_video.sql`。标签文件会收集本批次视频引用的 `primaryTags`、`secondaryTags` 并去重，使用 `uk_name` 幂等写入；视频 SQL 不包含 `pk_id`，三个操作人字段固定为 `1`，语言按标题是否包含 `[一-鿿]` 重新计算，并使用 `uk_cross_id` 保证重复执行时更新同一条视频。导入时先执行 `tb_admin_tag.sql`，再执行 `tb_video.sql`。
 
-如果源视频已经被软删除，管理端列表不会返回它。此时在 `.env` 中配置只读源库连接 `SOURCE_DATABASE_URL` 后再运行命令；导出会保留原 `uk_cross_id` 和业务字段，并在目标 SQL 中恢复为已发布、未删除。数据库账号只需要 `tb_video` 的 `SELECT` 权限。
+如果源视频已经被软删除，管理端列表不会返回它。此时在 `.env` 中配置只读源库连接 `SOURCE_DATABASE_URL` 后再运行命令；导出会优先从该库读取，并对源库缺失的最新视频自动请求 `BACKEND_BASE_URL` 补齐。导出会保留原 `uk_cross_id` 和业务字段，并在目标 SQL 中恢复为已发布、未删除。数据库账号只需要 `tb_video` 的 `SELECT` 权限。
 
 ### 按知识点配置清单上传英文视频
 
@@ -152,7 +156,7 @@ bun run video-no-tags:export-sql
 漏洞视频EN -> primaryTags: [介绍视频标签]
 ```
 
-视频文件名（忽略常见视频扩展名和英文大小写）必须与 `介绍视频EN` 或 `漏洞视频EN` 一一对应。建议先只扫描并检查生成的 `doc/en/videos.csv`：
+视频文件名与 `介绍视频EN` 或 `漏洞视频EN` 会先使用同一标题清洗规则：去掉扩展名、开头的 `数字-` 序号及末尾的 `EN`/`CN` 标记后，再忽略英文大小写进行一一对应。建议先只扫描并检查生成的 `doc/en/videos.csv`：
 
 ```powershell
 bun run video-tags:scan
@@ -172,11 +176,13 @@ bun run video-tags:upload
 bun run video-tags:all
 ```
 
-标签批次全部发布后，使用以下命令导出包含 `primaryTags`、`secondaryTags` 的 SQL：
+标签批次全部发布后，使用以下命令同步导出本批次引用标签和视频 SQL：
 
 ```powershell
 bun run video-tags:export-sql
 ```
+
+默认输出到 `workdir/update_video_tags/sql/tb_admin_tag.sql` 与 `tb_video.sql`。标签 SQL 会直接从该批次 CSV 的 `primaryTags`、`secondaryTags` 去重生成，并按 `uk_name` 幂等写入；即使目标环境已存在同名标签，也可以安全重复执行。若当前后端查不到状态文件记录的 `videoId`，标签 SQL 仍会先生成，但视频 SQL 会停止并报明缺失 ID。导入时先执行标签 SQL，再执行视频 SQL。
 
 扫描开始前会校验配置是否完整、名称是否重复、每个本地视频是否存在配置以及每个已配置视频是否存在本地文件。任何一项不满足都会停止，不生成可上传的半批次。两个英文视频列都为空的行视为不属于本次上传批次。
 

@@ -3,3 +3,5 @@ node_modules/
 workdir/
 dist/
 *.log
+.codex_tmp/
+outputs/

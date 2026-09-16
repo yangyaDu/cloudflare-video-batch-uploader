@@ -31,8 +31,13 @@ describe('BackendClient', () => {
       const request = new Request(input, init)
       requests.push(request)
       const path = new URL(request.url).pathname
-      const id = path.includes('/activity/') ? 22 : 11
-      const data = path.includes('/activity/delete') ? { id, isDeleted: 1 } : { id, status: 1 }
+      const activityUuid = '0123456789abcdef0123456789abcdef'
+      const data =
+        path === '/api/adminimda/duplicate-match/activity/add'
+          ? { activityUuid }
+          : path.includes('/activity/')
+            ? { activityUuid, status: 1 }
+            : { id: 11, status: 1 }
       return Response.json({ code: 0, message: 'success', data })
     }) as typeof fetch
 
@@ -61,14 +66,11 @@ describe('BackendClient', () => {
       startTime: 1,
       endTime: 2,
     })
-    await client().publishDuplicateMatchActivity(activity.id)
-    await client().unpublishDuplicateMatchActivity(activity.id)
-    await expect(client().deleteDuplicateMatchActivity(activity.id)).resolves.toEqual({
-      id: 22,
-      isDeleted: 1,
-    })
+    await client().publishDuplicateMatchActivity(activity.activityUuid)
+    await client().unpublishDuplicateMatchActivity(activity.activityUuid)
+    await client().deleteDuplicateMatchActivity(activity.activityUuid)
 
-    expect([hand.id, activity.id]).toEqual([11, 22])
+    expect([hand.id, activity.activityUuid]).toEqual([11, '0123456789abcdef0123456789abcdef'])
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       '/api/adminimda/duplicate-match/hand/add',
       '/api/adminimda/duplicate-match/hand/publish',
@@ -80,6 +82,9 @@ describe('BackendClient', () => {
     expect(
       requests.every((request) => request.headers.get('x-adminimda-token') === 'Bearer admin-token')
     ).toBe(true)
+    await expect(requests[3]?.json()).resolves.toEqual({ activityUuid: activity.activityUuid })
+    await expect(requests[4]?.json()).resolves.toEqual({ activityUuid: activity.activityUuid })
+    await expect(requests[5]?.json()).resolves.toEqual({ activityUuid: activity.activityUuid })
   })
 
   test('向后端申请 TUS 会话时携带管理员 token 和元数据', async () => {

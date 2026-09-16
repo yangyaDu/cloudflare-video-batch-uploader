@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { generateDuplicateMatchHandCases } from '../src/duplicate-match-hand/case-catalog'
+import { createDefaultDrillInfo } from '../src/duplicate-match-hand/defaults'
+import { generateNineMaxDuplicateMatchHandCases } from '../src/duplicate-match-hand/nine-max-case-catalog'
 
 describe('generateDuplicateMatchHandCases', () => {
   test('生成覆盖翻前与三条翻后街道 spot_type 的合法请求目录', () => {
@@ -107,5 +109,24 @@ describe('generateDuplicateMatchHandCases', () => {
       ]
       expect(boardActions).toHaveLength(expectedBoardCount)
     }
+  })
+
+  test('默认手牌骨架支持九人桌位置', () => {
+    const drillInfo = createDefaultDrillInfo(3, [], 9)
+
+    expect(drillInfo.players).toHaveLength(9)
+    expect(drillInfo.heroPosition).toBe('UTG')
+    expect(drillInfo.players.map((player) => player.seat_no)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+  })
+
+  test('九人桌 Case 使用九人桌位置并停在 Hero 决策点', () => {
+    const cases = generateNineMaxDuplicateMatchHandCases()
+
+    expect(cases).toHaveLength(3)
+    expect(new Set(cases.map((item) => item.request.drillInfo.players.length))).toEqual(
+      new Set([9])
+    )
+    expect(cases.map((item) => item.request.drillInfo.heroPosition)).toEqual(['UTG', 'LJ', 'HJ'])
+    expect(cases[2]?.request.drillInfo.actions.at(-1)).toMatchObject({ seat_no: 4, action: 'bet' })
   })
 })

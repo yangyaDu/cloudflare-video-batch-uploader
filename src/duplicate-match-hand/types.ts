@@ -64,10 +64,12 @@ export interface GeneratedHandCase {
 export interface DuplicateMatchHandBackend {
   addDuplicateMatchHand(payload: DuplicateMatchHandAddPayload): Promise<{ id: number }>
   publishDuplicateMatchHand(id: number): Promise<void>
-  addDuplicateMatchActivity(payload: DuplicateMatchActivityAddPayload): Promise<{ id: number }>
-  publishDuplicateMatchActivity(id: number): Promise<void>
-  unpublishDuplicateMatchActivity(id: number): Promise<void>
-  deleteDuplicateMatchActivity(id: number): Promise<{ id: number; isDeleted: 0 | 1 }>
+  addDuplicateMatchActivity(
+    payload: DuplicateMatchActivityAddPayload
+  ): Promise<{ activityUuid: string }>
+  publishDuplicateMatchActivity(activityUuid: string): Promise<void>
+  unpublishDuplicateMatchActivity(activityUuid: string): Promise<void>
+  deleteDuplicateMatchActivity(activityUuid: string): Promise<void>
 }
 
 export type HandCaseUploadStage =
@@ -80,7 +82,8 @@ export interface HandCaseUploadItemState {
   stage: HandCaseUploadStage
   handId?: number
   handPublished?: boolean
-  activityId?: number
+  /** 活动的 32 位对外唯一标识。 */
+  activityUuid?: string
   activityPublished?: boolean
   lastError: string | null
   updatedAt: string

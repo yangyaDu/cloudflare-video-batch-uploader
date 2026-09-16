@@ -71,23 +71,26 @@ export class BackendClient implements DuplicateMatchHandBackend {
 
   async addDuplicateMatchActivity(
     payload: DuplicateMatchActivityAddPayload
-  ): Promise<{ id: number }> {
-    return this.request<{ id: number }>('/duplicate-match/activity/add', payload)
+  ): Promise<{ activityUuid: string }> {
+    const activity = await this.request<{ activityUuid: string }>(
+      '/duplicate-match/activity/add',
+      payload
+    )
+    if (!/^[a-f0-9]{32}$/i.test(activity.activityUuid)) {
+      throw new Error('新增活动响应缺少 32 位 activityUuid')
+    }
+    return activity
   }
 
-  async publishDuplicateMatchActivity(id: number): Promise<void> {
-    await this.request<{ id: number; status: number }>('/duplicate-match/activity/publish', { id })
+  async publishDuplicateMatchActivity(activityUuid: string): Promise<void> {
+    await this.request('/duplicate-match/activity/publish', { activityUuid })
   }
 
-  async unpublishDuplicateMatchActivity(id: number): Promise<void> {
-    await this.request<{ id: number; status: number }>('/duplicate-match/activity/unpublish', {
-      id,
-    })
+  async unpublishDuplicateMatchActivity(activityUuid: string): Promise<void> {
+    await this.request('/duplicate-match/activity/unpublish', { activityUuid })
   }
 
-  async deleteDuplicateMatchActivity(id: number): Promise<{ id: number; isDeleted: 0 | 1 }> {
-    return this.request<{ id: number; isDeleted: 0 | 1 }>('/duplicate-match/activity/delete', {
-      id,
-    })
+  async deleteDuplicateMatchActivity(activityUuid: string): Promise<void> {
+    await this.request('/duplicate-match/activity/delete', { activityUuid })
   }
 }

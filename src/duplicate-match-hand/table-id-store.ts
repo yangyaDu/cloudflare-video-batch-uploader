@@ -6,14 +6,21 @@ import { stringify } from 'csv-stringify/sync'
 import { atomicWrite, pathExists } from '../fs-utils'
 import type { GeneratedHandCase, HandCaseUploadItemState } from './types'
 
-const HAND_TABLE_ID_COLUMNS = ['caseId', 'title', 'handId', 'activityId', 'tableId'] as const
+const HAND_TABLE_ID_COLUMNS = ['caseId', 'title', 'handId', 'activityUuid', 'tableId'] as const
+const LEGACY_HAND_TABLE_ID_WITH_ACTIVITY_ID_COLUMNS = [
+  'caseId',
+  'title',
+  'handId',
+  'activityId',
+  'tableId',
+] as const
 const LEGACY_HAND_TABLE_ID_COLUMNS = ['caseId', 'title', 'tableId'] as const
 
 export interface HandTableIdRow {
   caseId: string
   title: string
   handId?: string
-  activityId?: string
+  activityUuid?: string
   tableId: string
 }
 
@@ -48,14 +55,20 @@ export async function readHandTableIdCsv(path: string): Promise<HandTableIdRow[]
   const isLegacyHeader =
     headers.length === LEGACY_HAND_TABLE_ID_COLUMNS.length &&
     headers.every((header, index) => header === LEGACY_HAND_TABLE_ID_COLUMNS[index])
-  if (!isCurrentHeader && !isLegacyHeader) {
+  const isLegacyActivityIdHeader =
+    headers.length === LEGACY_HAND_TABLE_ID_WITH_ACTIVITY_ID_COLUMNS.length &&
+    headers.every(
+      (header, index) => header === LEGACY_HAND_TABLE_ID_WITH_ACTIVITY_ID_COLUMNS[index]
+    )
+  if (!isCurrentHeader && !isLegacyHeader && !isLegacyActivityIdHeader) {
     throw new Error(`tableId CSV 表头必须为: ${HAND_TABLE_ID_COLUMNS.join(',')}`)
   }
   return rows.map((row) => ({
     caseId: row.caseId,
     title: row.title,
     handId: row.handId ?? '',
-    activityId: row.activityId ?? '',
+    activityUuid:
+      row.activityUuid ?? (row as HandTableIdRow & { activityId?: string }).activityId ?? '',
     tableId: row.tableId,
   }))
 }
@@ -75,9 +88,9 @@ export async function syncHandTableIdCsv(
     handId: stateByCaseId?.has(item.caseId)
       ? String(stateByCaseId.get(item.caseId)?.handId ?? '')
       : (existingByCaseId.get(item.caseId)?.handId ?? ''),
-    activityId: stateByCaseId?.has(item.caseId)
-      ? String(stateByCaseId.get(item.caseId)?.activityId ?? '')
-      : (existingByCaseId.get(item.caseId)?.activityId ?? ''),
+    activityUuid: stateByCaseId?.has(item.caseId)
+      ? String(stateByCaseId.get(item.caseId)?.activityUuid ?? '')
+      : (existingByCaseId.get(item.caseId)?.activityUuid ?? ''),
     tableId: existingByCaseId.get(item.caseId)?.tableId ?? '',
   }))
   await writeHandTableIdCsv(path, rows)

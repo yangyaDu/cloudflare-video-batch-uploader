@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import {
+  collectVideoTagNames,
   createVideoBatchSql,
+  createVideoTagBatchSql,
   deriveVideoLanguage,
   exportVideoBatchSql,
+  exportVideoTagBatchSql,
   type VideoExportRow,
 } from '../src/video/sql-exporter'
 import { resolveWorkPaths } from '../src/video/paths'
@@ -82,6 +85,27 @@ describe('createVideoBatchSql', () => {
   })
 })
 
+describe('createVideoTagBatchSql', () => {
+  test('去重导出当前批次引用的标签，并以 uk_name 幂等导入', () => {
+    const tags = collectVideoTagNames([
+      video({ primaryTags: ['BTN Steal', 'BB Defense'], secondaryTags: ['BTN Steal'] }),
+      video({ id: 104, primaryTags: ['BB Defense'], secondaryTags: ['Exploit'] }),
+    ])
+    const sql = createVideoTagBatchSql(tags)
+
+    expect(tags).toEqual(['BTN Steal', 'BB Defense', 'Exploit'])
+    expect(sql).toContain('INSERT INTO `tb_admin_tag`')
+    expect(sql).toContain('`uk_name` = VALUES(`uk_name`)')
+    expect(sql.match(/'BTN Steal'/g) ?? []).toHaveLength(1)
+    expect(sql).toContain("'Exploit'")
+  })
+
+  test('拒绝空白或超长标签名', () => {
+    expect(() => collectVideoTagNames([video({ primaryTags: [' tag'] })])).toThrow('无效标签名')
+    expect(() => createVideoTagBatchSql(['a'.repeat(65)])).toThrow('无效标签名')
+  })
+})
+
 describe('exportVideoBatchSql', () => {
   test('只使用实际存在的英文状态文件中的已发布 videoId 生成指定 SQL 文件', async () => {
     const workDir = await mkdtemp(join(tmpdir(), 'video-sql-export-'))
@@ -114,13 +138,42 @@ describe('exportVideoBatchSql', () => {
     const result = await exportVideoBatchSql(workDir, undefined, {
       async listVideosByIds(ids) {
         requestedIds = ids
-        return ids.map((id) => video({ id, crossId: `cross-${id}`, title: `Video ${id}` }))
+        return ids.map((id) =>
+          video({
+            id,
+            crossId: `cross-${id}`,
+            title: `Video ${id}`,
+            primaryTags: ['New tag'],
+          })
+        )
       },
     })
 
     expect(requestedIds).toEqual([103])
     expect(result.outputPath).toBe(join(workDir, 'sql', 'tb_video.sql'))
+    expect(result.tagOutputPath).toBe(join(workDir, 'sql', 'tb_admin_tag.sql'))
+    expect(result.tagCount).toBe(1)
     expect(result.count).toBe(1)
     expect(await readFile(result.outputPath, 'utf8')).not.toContain('`pk_id`')
+    expect(await readFile(result.tagOutputPath, 'utf8')).toContain("'New tag'")
+  })
+})
+
+describe('exportVideoTagBatchSql', () => {
+  test('直接从批次 CSV 去重导出标签 SQL，不依赖视频表', async () => {
+    const workDir = await mkdtemp(join(tmpdir(), 'video-tag-sql-export-'))
+    const csvPath = join(workDir, 'doc', 'en', 'videos.csv')
+    await mkdir(dirname(csvPath), { recursive: true })
+    await writeFile(
+      csvPath,
+      'language,difficulty,title,titleDescription,coverId,coverUrl,primaryTags,secondaryTags,videoUid\nen,10,Video, ,cover,https://example.com/cover,"[""BTN Steal""]","[""Exploit"",""BTN Steal""]",uid\n'
+    )
+
+    const result = await exportVideoTagBatchSql(workDir)
+
+    expect(result.tagNames).toEqual(['BTN Steal', 'Exploit'])
+    expect(result.tagCount).toBe(2)
+    expect(result.tagOutputPath).toBe(join(workDir, 'sql', 'tb_admin_tag.sql'))
+    expect(await readFile(result.tagOutputPath, 'utf8')).toContain("'Exploit'")
   })
 })

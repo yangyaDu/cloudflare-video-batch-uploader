@@ -1,23 +1,12 @@
 import { readFile } from 'node:fs/promises'
-import { extname, posix } from 'node:path'
 
 import { parse } from 'csv-parse/sync'
 
-const REQUIRED_COLUMNS = ['介绍视频标签', '介绍视频EN', '漏洞视频EN'] as const
-const VIDEO_EXTENSIONS = new Set([
-  '.3gp',
-  '.avi',
-  '.flv',
-  '.m4v',
-  '.mkv',
-  '.mov',
-  '.mp4',
-  '.mpeg',
-  '.mpg',
-  '.mxf',
-  '.ts',
-  '.webm',
-])
+import { videoTitle } from './fs-utils'
+
+const TAG_COLUMN = '介绍视频标签'
+const INTRO_VIDEO_COLUMN = '介绍视频EN'
+const VULNERABILITY_VIDEO_COLUMN = '漏洞视频EN'
 
 export interface VideoTagAssignment {
   configuredName: string
@@ -26,10 +15,7 @@ export interface VideoTagAssignment {
 }
 
 function normalizeVideoName(value: string): string {
-  const fileName = posix.basename(value.trim().replaceAll('\\', '/'))
-  const extension = extname(fileName).toLowerCase()
-  const title = VIDEO_EXTENSIONS.has(extension) ? fileName.slice(0, -extension.length) : fileName
-  return title.trim().normalize('NFC').toLowerCase()
+  return videoTitle(value.trim().replaceAll('\\', '/')).trim().normalize('NFC').toLowerCase()
 }
 
 export class VideoTagConfig {
@@ -97,25 +83,30 @@ export async function readVideoTagConfig(path: string): Promise<VideoTagConfig> 
     trim: false,
   }) as string[][]
 
-  const headerIndex = records.findIndex((record) =>
-    REQUIRED_COLUMNS.every((column) => record.includes(column))
+  const headerIndex = records.findIndex(
+    (record) =>
+      record.includes(TAG_COLUMN) &&
+      (record.includes(INTRO_VIDEO_COLUMN) || record.includes(VULNERABILITY_VIDEO_COLUMN))
   )
   if (headerIndex < 0) {
-    throw new Error(`配置 CSV 缺少表头: ${REQUIRED_COLUMNS.join('、')}`)
+    throw new Error(
+      `配置 CSV 缺少表头: ${TAG_COLUMN}，以及 ${INTRO_VIDEO_COLUMN}/${VULNERABILITY_VIDEO_COLUMN} 至少一列`
+    )
   }
 
   const headers = records[headerIndex]!
-  const tagIndex = headers.indexOf('介绍视频标签')
-  const introIndex = headers.indexOf('介绍视频EN')
-  const vulnerabilityIndex = headers.indexOf('漏洞视频EN')
+  const tagIndex = headers.indexOf(TAG_COLUMN)
+  const introIndex = headers.indexOf(INTRO_VIDEO_COLUMN)
+  const vulnerabilityIndex = headers.indexOf(VULNERABILITY_VIDEO_COLUMN)
   const assignments = new Map<string, VideoTagAssignment>()
 
   for (let index = headerIndex + 1; index < records.length; index += 1) {
     const record = records[index]!
     const rowNumber = index + 1
     const primaryTag = (record[tagIndex] ?? '').trim()
-    const introVideo = (record[introIndex] ?? '').trim()
-    const vulnerabilityVideo = (record[vulnerabilityIndex] ?? '').trim()
+    const introVideo = introIndex < 0 ? '' : (record[introIndex] ?? '').trim()
+    const vulnerabilityVideo =
+      vulnerabilityIndex < 0 ? '' : (record[vulnerabilityIndex] ?? '').trim()
 
     // 未配置英文视频的知识点不属于本次上传批次。
     if (!introVideo && !vulnerabilityVideo) continue

@@ -23,7 +23,15 @@ export {
   createVideoExportBackendFromEnvironment,
   normalizeDatabaseVideoRow,
   VideoDatabaseExportBackend,
+  VideoDatabaseWithBackendFallback,
 } from './video/sql-database'
-export { createVideoBatchSql, deriveVideoLanguage, exportVideoBatchSql } from './video/sql-exporter'
+export {
+  collectVideoTagNames,
+  createVideoBatchSql,
+  createVideoTagBatchSql,
+  deriveVideoLanguage,
+  exportVideoBatchSql,
+  exportVideoTagBatchSql,
+} from './video/sql-exporter'
 export { uploadVideos } from './video/uploader'
 export { VIDEO_COLUMNS, createDefaultVideoRow } from './video/video-schema'
