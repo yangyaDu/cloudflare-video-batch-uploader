@@ -131,9 +131,18 @@ VIDEO_READY_TIMEOUT_MS=1800000
 Set-Location 'E:\idea_project\ZenithStrat\cloudflare-video-batch-uploader'
 $batch = '20260915_phase3' # 改成本批批次名
 
+# 统计本批视频的文件数量、各语言时长和总时长，不会修改或上传文件
 bun run src/cli.ts duration --work-dir ".\workdir\$batch"
+
+# 扫描 video/zh 和 video/en，生成封面、videos.csv 和 upload-state.json，不会上传
 bun run src/cli.ts scan --work-dir ".\workdir\$batch"
+
+# 根据扫描结果上传尚未完成的视频和封面，并写入、发布后端 video 记录
+# 中断后可重复执行；脚本会读取 upload-state.json，跳过已经完成的步骤
 bun run src/cli.ts upload --work-dir ".\workdir\$batch"
+
+# 根据本批已发布的视频生成可重复执行的标签 SQL 和视频 SQL
+# 输出到 workdir/<批次名>/sql/tb_admin_tag.sql 和 tb_video.sql
 bun run src/cli.ts export-sql --work-dir ".\workdir\$batch"
 ```
 
