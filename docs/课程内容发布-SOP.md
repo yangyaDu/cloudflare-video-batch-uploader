@@ -29,12 +29,12 @@ bun --version
 
 以下版本已于 2026-09-16 核对：
 
-| 用途                 | 仓库                                                              | 应使用的分支 / 提交                                  |
-| -------------------- | ----------------------------------------------------------------- | ---------------------------------------------------- |
-| 视频上传、视频 SQL   | `https://github.com/yangyaDu/cloudflare-video-batch-uploader.git` | `main` / `2992929`                                   |
-| 学习节点             | 同上                                                              | `main` / `2992929`                                   |
-| Drill 配表、矩阵跑数 | `http://10.10.1.100:3000/ZenithStrat/backend-framework`           | `feat/postflop-drill-select-hole-cards` / `11e040df` |
-| Drill 范围数据       | `http://10.10.1.100:3000/ZenithStrat/preflop-range.git`           | `main` / `3234c34`                                   |
+| 用途                 | 仓库                                                               | 应使用的分支 / 提交                                  |
+| -------------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| 视频上传、视频 SQL   | `http://10.10.1.100:3000/dion/cloudflare-video-batch-uploader.git` | `main`，最低版本 `7aad9c8`                           |
+| 学习节点             | 同上                                                               | `main`，最低版本 `7aad9c8`                           |
+| Drill 配表、矩阵跑数 | `http://10.10.1.100:3000/ZenithStrat/backend-framework`            | `feat/postflop-drill-select-hole-cards` / `11e040df` |
+| Drill 范围数据       | `http://10.10.1.100:3000/ZenithStrat/preflop-range.git`            | `main` / `3234c34`                                   |
 
 `cloudflare-video-batch-uploader/main` 已包含 `src/learn-node/`、示例 Manifest、文档和对应的 `learn:*` 命令，其他机器可直接拉取使用。
 
@@ -44,7 +44,7 @@ bun --version
 $projectRoot = 'E:\idea_project\ZenithStrat'
 Set-Location $projectRoot
 
-git clone https://github.com/yangyaDu/cloudflare-video-batch-uploader.git
+git clone http://10.10.1.100:3000/dion/cloudflare-video-batch-uploader.git
 git clone --branch feat/postflop-drill-select-hole-cards `
   http://10.10.1.100:3000/ZenithStrat/backend-framework
 git clone http://10.10.1.100:3000/ZenithStrat/preflop-range.git
@@ -287,7 +287,7 @@ Copy-Item `
 
 ## 4. 创建并发布学习节点
 
-执行仓库：`cloudflare-video-batch-uploader/main`，最低版本为 `2992929`。
+执行仓库：`cloudflare-video-batch-uploader/main`，最低版本为 `7aad9c8`。
 
 ### 4.1 准备 Manifest
 
