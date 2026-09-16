@@ -379,7 +379,53 @@ bun run learn:publish <课程根节点UUID>
 - [ ] 根课程及其子节点均已发布。
 - [ ] `$created` 已保存，作为节点 UUID 和断点续跑记录。
 
-## 5. 发布顺序
+## 5. 整理本次发布的新增 SQL
+
+学习节点创建并确认无误后，将本批新增内容整理成独立的 SQL 发布包：
+
+```text
+workdir/<批次名>/release-sql/
+├── 01_tb_admin_tag.sql
+├── 02_tb_video.sql
+├── 03_tb_learn_node.sql
+└── 99_verify.sql
+```
+
+### 5.1 整理 SQL 文件
+
+先建立发布目录并复制视频脚本生成的两个 SQL：
+
+```powershell
+Set-Location 'E:\idea_project\ZenithStrat\cloudflare-video-batch-uploader'
+$batch = '20260915_phase3' # 改成本批批次名
+$releaseSql = ".\workdir\$batch\release-sql"
+
+New-Item -ItemType Directory -Force $releaseSql
+Copy-Item ".\workdir\$batch\sql\tb_admin_tag.sql" "$releaseSql\01_tb_admin_tag.sql"
+Copy-Item ".\workdir\$batch\sql\tb_video.sql" "$releaseSql\02_tb_video.sql"
+```
+
+- `01_tb_admin_tag.sql`：复制本批 `export-sql` 生成的 `sql/tb_admin_tag.sql`。
+- `02_tb_video.sql`：复制本批 `export-sql` 生成的 `sql/tb_video.sql`。
+- `03_tb_learn_node.sql`：根据最终 `$created` 文件整理本批新增的章节、小节、视频和 Drill 节点 SQL。
+- `99_verify.sql`：查询本批视频和节点的总数、发布状态、唯一资源数，执行结果必须与课程对照表一致。
+
+整理要求：
+
+- 只包含本批新增的视频和学习节点，不夹带历史批次或无关修正。
+- 视频按 `uk_cross_id` 幂等写入，学习节点按 `node_uuid` 幂等写入，SQL 重复执行不能产生重复数据。
+- 视频和学习节点发布状态均为已发布，Drill 的 `minAccuracy` 保持 `0`。
+- 视频节点 `ref_id` 使用 `tb_video.uk_cross_id`，Drill 节点 `ref_id` 使用 `drill_public_id`。
+- `drill_scenario_config.json` 和 `postflop-drill-data.json` 通过代码仓库发布，不放进 SQL。
+
+### 5.2 SQL 核对结果
+
+- [ ] SQL 文件按 `01 → 02 → 03 → 99` 的顺序执行无报错。
+- [ ] 本批视频数、节点数和唯一资源数正确。
+- [ ] 没有重复的 `uk_cross_id`、`video_uid`、`node_uuid` 或错误复用的 `drill_public_id`。
+- [ ] SQL 中没有 Token、开发环境地址或与本批无关的数据。
+
+## 6. 发布顺序
 
 必须按以下顺序，不能倒置：
 
@@ -388,23 +434,19 @@ bun run learn:publish <课程根节点UUID>
 3. 发布并部署 `backend-framework` 的 Drill 配置。
 4. Dry Run 学习节点 Manifest。
 5. 创建学习节点，检查整棵树。
-6. 发布课程根节点。
-7. 在实际学习端完成一次视频播放和 Drill 建桌验收。
+6. 整理本批新增 SQL，并按顺序测试执行和核对数量。
+7. 发布课程根节点。
+8. 在实际学习端完成一次视频播放和 Drill 建桌验收。
 
-如果团队要求 SQL 留档，将以下内容放入同一个发布批次目录：
+发布记录还要保存后端 Drill 配置提交号、`preflop-range` 数据提交号、课程对照表和最终验收记录。
 
-- `workdir/<批次名>/sql/tb_video.sql`。
-- 本批学习节点 SQL（如本批另有 SQL 生成脚本）。
-- 后端 Drill 配置提交号。
-- `preflop-range` 数据提交号。
-- 课程对照表和最终验收记录。
-
-## 6. 最终交接清单
+## 7. 最终交接清单
 
 发布人完成后，把下面的结果一次性交给复核人：
 
 - [ ] 批次名、环境和发布时间。
 - [ ] 视频数量、总时长、失败数和视频 SQL 路径。
+- [ ] 本批 `release-sql` 目录及 SQL 验证结果。
 - [ ] Drill 数量、行动线数量、失败数及两个仓库提交号。
 - [ ] 课程根节点 UUID、节点数量和 `$created` 文件路径。
 - [ ] 视频播放、Drill 建桌、章节顺序和资源绑定的验收结果。
