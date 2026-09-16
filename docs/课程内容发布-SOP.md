@@ -201,9 +201,9 @@ backend-framework/src/datasheet/data/drill_scenario_config.json
 
 检查本批次：`drill_id`、`drill_public_id`、`drill_name` 均不得重复，标题必须与课程对照表完全一致。
 
-### 3.2 整理跑数输入
+### 3.2 整理需要跑的行动线输入请求
 
-文件放在：
+在以下目录准备两个文件：
 
 ```text
 backend-framework/scripts/third_party_strategy_grid/data/
@@ -211,7 +211,7 @@ backend-framework/scripts/third_party_strategy_grid/data/
 └── drill_action_lines.select-hole-cards.json
 ```
 
-`drill_action_lines.json`：
+`drill_action_lines.json` 用来列出本批需要跑数的 Drill 和行动线。每个 Drill 写一个对象；`drill_public_id` 必须与 Drill 配表一致，`action_lines` 填该 Drill 的全部行动线：
 
 ```json
 [
@@ -222,7 +222,7 @@ backend-framework/scripts/third_party_strategy_grid/data/
 ]
 ```
 
-`drill_action_lines.select-hole-cards.json`：
+`drill_action_lines.select-hole-cards.json` 用来指定练习底牌。第一层键是 `drill_public_id`；`action_line` 必须与上一个文件中的行动线完全一致；`select_hole_cards` 填该行动线需要练习的底牌：
 
 ```json
 {
@@ -235,7 +235,7 @@ backend-framework/scripts/third_party_strategy_grid/data/
 }
 ```
 
-公共牌变化要直接展开成多条 `action_lines`。不要再整理 `hole_cards_candidate`、`isomorphism_flop` 等中间字段。
+同一个 Drill 有多种公共牌或行动过程时，在 `action_lines` 中分别写成多条记录，并在指定底牌文件中逐条对应。
 
 ### 3.3 先拉完整底表，再跑本批数据
 
@@ -255,12 +255,6 @@ bun run scripts/third_party_strategy_grid/run-scene-range-third-party.ts `
 ```
 
 `QUINTACE_API_TOKEN` 必填。只有需要覆盖默认 staging 地址时才设置 `QUINTACE_MATRIX_URL`。没有缓存的 Gitea 登录凭据时，拉取底表前临时设置 `GITEA_TOKEN`。
-
-不要使用：
-
-- `heads_up_strategy_grid_actions` 三段脚本作为正式发布流程。
-- `AI_GRID_SERVICE_URL` 或 `AI_SERVICE_URL` 配置本流程。
-- `--overwrite` 覆盖完整旧数据。
 
 ### 3.4 检查并提交完整范围文件
 
